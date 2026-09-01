@@ -11,6 +11,7 @@ from sqlalchemy import desc, or_, func
 from backend.app.database.session import get_db
 from backend.app.models.document import Document
 from backend.app.models.audit import AuditLog
+from backend.app.models.sustainability_metric import SustainabilityMetric
 from backend.app.schemas.document import (
     DocumentResponse,
     DocumentListResponse,
@@ -23,6 +24,7 @@ from backend.app.schemas.document import (
 from backend.app.services.extraction_service import ExtractionPipelineService
 from backend.app.services.ocr_service import OCRService
 from backend.app.services.llm_service import LLMService
+from backend.app.services.normalization_service import NormalizationService
 from backend.app.utils.helpers import generate_unique_filename
 from backend.app.utils.sample_generator import (
     generate_sample_electricity_bill,
@@ -34,6 +36,7 @@ from backend.app.utils.sample_generator import (
 router = APIRouter(prefix="/api", tags=["Document AI"])
 pipeline_service = ExtractionPipelineService()
 llm_service = LLMService()
+normalization_service = NormalizationService()
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -224,6 +227,10 @@ def verify_field(
 
     db.commit()
     db.refresh(doc)
+    try:
+        normalization_service.normalize_extraction(db, doc)
+    except Exception as e:
+        print(f"Notice: Normalization after verify failed: {e}")
     return doc
 
 @router.put("/documents/{document_id}/correct-field", response_model=DocumentResponse)
@@ -334,11 +341,6 @@ def correct_field(
     # Update quality summary human_verified count
     quality_summary = doc.quality_summary or {}
     quality_summary["human_verified"] = sum(1 for ev in evidence_list if ev.get("is_verified"))
-    # Bonus points for human verification
-    orig_score = quality_summary.get("quality_score", doc.quality_score or 80.0)
-    new_score = min(100.0, round(orig_score + 2.5, 1))
-    quality_summary["quality_score"] = new_score
-    doc.quality_score = new_score
     doc.quality_summary = quality_summary
 
     # Audit Log Entry
@@ -357,6 +359,10 @@ def correct_field(
 
     db.commit()
     db.refresh(doc)
+    try:
+        normalization_service.normalize_extraction(db, doc)
+    except Exception as e:
+        print(f"Notice: Normalization after correction failed: {e}")
     return doc
 
 @router.put("/documents/{document_id}/review-status", response_model=DocumentResponse)
@@ -396,7 +402,108 @@ def update_review_status(
 
     db.commit()
     db.refresh(doc)
+    try:
+        normalization_service.normalize_extraction(db, doc)
+    except Exception as e:
+        print(f"Notice: Normalization after status update failed: {e}")
     return doc
+
+@router.post("/documents/{document_id}/normalize")
+def normalize_document_endpoint(document_id: int, db: Session = Depends(get_db)):
+    """
+    Normalize extracted document fields into standardized SustainabilityMetric records.
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if not doc.structured_data:
+        raise HTTPException(status_code=400, detail="Document has no structured data extracted yet")
+
+    metrics = normalization_service.normalize_extraction(db, doc)
+    return {
+        "document_id": doc.id,
+        "metrics_created": len(metrics),
+        "metrics": [m.to_dict() for m in metrics]
+    }
+
+@router.get("/metrics")
+def list_normalized_metrics(
+    company: Optional[str] = Query(None, description="Filter by company name"),
+    metric_type: Optional[str] = Query(None, description="Filter by metric type"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    start_date: Optional[str] = Query(None, description="Filter by period start"),
+    end_date: Optional[str] = Query(None, description="Filter by period end"),
+    verification_status: Optional[str] = Query(None, description="Filter by verification status"),
+    db: Session = Depends(get_db)
+):
+    """
+    List standardized sustainability metrics across documents with optional filtering.
+    """
+    query = db.query(SustainabilityMetric)
+    if company:
+        query = query.filter(SustainabilityMetric.company_name.ilike(f"%{company}%"))
+    if metric_type:
+        query = query.filter(SustainabilityMetric.metric_type == metric_type)
+    if category:
+        query = query.filter(SustainabilityMetric.category == category)
+    if start_date:
+        query = query.filter(SustainabilityMetric.period_start >= start_date)
+    if end_date:
+        query = query.filter(SustainabilityMetric.period_end <= end_date)
+    if verification_status:
+        query = query.filter(SustainabilityMetric.verification_status == verification_status)
+
+    metrics = query.order_by(desc(SustainabilityMetric.created_at)).all()
+    return {
+        "total": len(metrics),
+        "metrics": [m.to_dict() for m in metrics]
+    }
+
+@router.get("/metrics/summary")
+def get_portfolio_metrics_summary(db: Session = Depends(get_db)):
+    """
+    Get portfolio-level aggregated sustainability totals.
+    Guarantees unit safety by strictly summing compatible units only.
+    """
+    metrics = db.query(SustainabilityMetric).all()
+
+    # Sum only compatible units
+    total_electricity_kwh = sum(m.value for m in metrics if m.metric_type == "electricity_consumption" and m.unit == "kWh")
+    total_renewable_energy_kwh = sum(m.value for m in metrics if m.metric_type == "renewable_energy" and m.unit == "kWh")
+    total_fuel_liters = sum(m.value for m in metrics if m.metric_type == "fuel_consumption" and m.unit in ["Liters", "L", "lts"])
+    total_scope_1_tco2e = sum(m.value for m in metrics if m.metric_type == "scope_1_emissions" and m.unit == "tCO2e")
+    total_scope_2_tco2e = sum(m.value for m in metrics if m.metric_type == "scope_2_emissions" and m.unit == "tCO2e")
+    total_ghg_emissions_tco2e = sum(m.value for m in metrics if m.metric_type == "total_ghg_emissions" and m.unit == "tCO2e")
+    if not total_ghg_emissions_tco2e:
+        total_ghg_emissions_tco2e = total_scope_1_tco2e + total_scope_2_tco2e
+
+    total_water_kl = sum(m.value for m in metrics if m.metric_type == "water_consumption" and m.unit == "kL")
+    total_recycled_water_kl = sum(m.value for m in metrics if m.metric_type == "recycled_water" and m.unit == "kL")
+    total_hazardous_waste_kg = sum(m.value for m in metrics if m.metric_type == "hazardous_waste" and m.unit == "kg")
+    total_non_hazardous_waste_kg = sum(m.value for m in metrics if m.metric_type == "non_hazardous_waste" and m.unit == "kg")
+    total_waste_kg = total_hazardous_waste_kg + total_non_hazardous_waste_kg
+
+    ai_extracted_count = sum(1 for m in metrics if m.verification_status == "AI_EXTRACTED")
+    human_verified_count = sum(1 for m in metrics if m.verification_status == "HUMAN_VERIFIED")
+    docs_with_metrics = len(set(m.document_id for m in metrics))
+
+    return {
+        "total_electricity_kwh": round(total_electricity_kwh, 2),
+        "total_renewable_energy_kwh": round(total_renewable_energy_kwh, 2),
+        "total_fuel_liters": round(total_fuel_liters, 2),
+        "total_scope_1_tco2e": round(total_scope_1_tco2e, 2),
+        "total_scope_2_tco2e": round(total_scope_2_tco2e, 2),
+        "total_total_ghg_tco2e": round(total_ghg_emissions_tco2e, 2),
+        "total_water_kl": round(total_water_kl, 2),
+        "total_recycled_water_kl": round(total_recycled_water_kl, 2),
+        "total_hazardous_waste_kg": round(total_hazardous_waste_kg, 2),
+        "total_non_hazardous_waste_kg": round(total_non_hazardous_waste_kg, 2),
+        "total_waste_kg": round(total_waste_kg, 2),
+        "ai_extracted_count": ai_extracted_count,
+        "human_verified_count": human_verified_count,
+        "total_metrics_count": len(metrics),
+        "documents_with_metrics_count": docs_with_metrics
+    }
 
 @router.get("/documents/{document_id}/audit-trail")
 def get_audit_trail(document_id: int, db: Session = Depends(get_db)):

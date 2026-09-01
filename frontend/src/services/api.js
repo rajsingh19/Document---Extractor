@@ -85,4 +85,19 @@ export const seedSampleDocument = async (sampleType = 'electricity') => {
   return response.data;
 };
 
+export const getMetrics = async (params = {}) => {
+  const response = await api.get('/metrics', { params });
+  return response.data;
+};
+
+export const getMetricsSummary = async () => {
+  const response = await api.get('/metrics/summary');
+  return response.data;
+};
+
+export const normalizeDocument = async (documentId) => {
+  const response = await api.post(`/documents/${documentId}/normalize`);
+  return response.data;
+};
+
 export default api;

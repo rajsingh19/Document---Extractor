@@ -131,7 +131,57 @@ Return ONLY a single valid JSON object strictly matching this schema:
 }
 """
 
-IMPORTANT_EVALUATION_FIELDS = [
+DOCUMENT_EXPECTED_FIELDS: Dict[str, List[str]] = {
+    "Electricity Bill": [
+        "company_name",
+        "billing_period",
+        "electricity_kwh",
+        "total_energy_cost_inr",
+    ],
+    "Fuel Receipt": [
+        "company_name",
+        "billing_period",
+        "fuel_diesel_liters",
+        "total_energy_cost_inr",
+    ],
+    "Water Bill": [
+        "company_name",
+        "billing_period",
+        "water_consumption_kl",
+        "total_energy_cost_inr",
+    ],
+    "Waste Manifest": [
+        "company_name",
+        "billing_period",
+        "hazardous_waste_kg",
+        "non_hazardous_waste_kg",
+    ],
+    "ESG Audit Report": [
+        "company_name",
+        "billing_period",
+        "scope_1_direct_tco2e",
+        "scope_2_indirect_tco2e",
+        "compliance_status",
+    ],
+    "Environmental Audit": [
+        "company_name",
+        "billing_period",
+        "compliance_status",
+    ],
+    "Commercial Invoice": [
+        "company_name",
+        "billing_period",
+        "total_energy_cost_inr",
+    ],
+}
+
+DEFAULT_EXPECTED_FIELDS: List[str] = [
+    "company_name",
+    "billing_period",
+    "total_energy_cost_inr",
+]
+
+ALL_EVALUATION_FIELDS: List[str] = [
     "company_name",
     "registration_id",
     "billing_period",
@@ -143,7 +193,7 @@ IMPORTANT_EVALUATION_FIELDS = [
     "scope_1_direct_tco2e",
     "scope_2_indirect_tco2e",
     "total_energy_cost_inr",
-    "compliance_status"
+    "compliance_status",
 ]
 
 class LLMService:
@@ -205,63 +255,150 @@ class LLMService:
         except ValueError:
             return None
 
+    def _is_field_extracted(self, field: str, data: Dict[str, Any], evidence_map: Dict[str, Any]) -> bool:
+        """Check if a specific field was extracted with a non-null value either in evidence or structured payload."""
+        if field in evidence_map and evidence_map[field].get("value") is not None:
+            return True
+        if field == "company_name":
+            return bool(data.get("company", {}).get("name"))
+        elif field == "registration_id":
+            return bool(data.get("company", {}).get("registration_id"))
+        elif field == "billing_period":
+            p = data.get("period", {})
+            return bool(p.get("billing_month") or p.get("issue_date") or p.get("start_date"))
+        elif field == "electricity_kwh":
+            return data.get("energy", {}).get("electricity_kwh") is not None
+        elif field == "fuel_diesel_liters":
+            return data.get("energy", {}).get("fuel_diesel_liters") is not None
+        elif field == "total_energy_cost_inr":
+            return data.get("energy", {}).get("total_energy_cost_inr") is not None
+        elif field == "water_consumption_kl":
+            return data.get("water_and_waste", {}).get("water_consumption_kl") is not None
+        elif field == "hazardous_waste_kg":
+            return data.get("water_and_waste", {}).get("hazardous_waste_kg") is not None
+        elif field == "non_hazardous_waste_kg":
+            return data.get("water_and_waste", {}).get("non_hazardous_waste_kg") is not None
+        elif field == "scope_1_direct_tco2e":
+            return data.get("carbon_emissions", {}).get("scope_1_direct_tco2e") is not None
+        elif field == "scope_2_indirect_tco2e":
+            return data.get("carbon_emissions", {}).get("scope_2_indirect_tco2e") is not None
+        elif field == "compliance_status":
+            return bool(data.get("compliance", {}).get("compliance_status"))
+        return False
+
     def _enrich_quality_metrics(self, data: Dict[str, Any], extraction_method: str, provider: str) -> Dict[str, Any]:
         """
         Calculate deterministic Extraction Quality Score (0 to 100) and review status based on:
-        - Ingestion Method (PyMuPDF vs OCR fallback)
-        - Evidence coverage
-        - Field-level confidence scores
-        - Missing important fields
+        - Document type expected fields (distinguishing EXPECTED_MISSING from NOT_APPLICABLE)
+        - Ingestion Method (PyMuPDF vs OCR fallback penalty)
+        - Evidence coverage & source text verification
+        - Field-level confidence scores (High vs Medium vs Low)
+        - Core identity completeness
         """
+        doc_type = data.get("document_type", "Commercial Invoice")
+        expected_fields = DOCUMENT_EXPECTED_FIELDS.get(doc_type, DEFAULT_EXPECTED_FIELDS)
+
         evidence_list = data.get("evidence", [])
         evidence_map = {item["field"]: item for item in evidence_list if isinstance(item, dict) and "field" in item}
 
         high_count = sum(1 for e in evidence_list if e.get("confidence_level") == "HIGH" or e.get("confidence", 0) >= 0.9)
         med_count = sum(1 for e in evidence_list if e.get("confidence_level") == "MEDIUM" or (0.7 <= e.get("confidence", 0) < 0.9))
         low_count = sum(1 for e in evidence_list if e.get("confidence_level") == "LOW" or (0.0 < e.get("confidence", 0) < 0.7))
-        evidence_backed_count = len(evidence_list)
+        evidence_backed_count = sum(1 for e in evidence_list if e.get("source_text"))
 
-        # Identify missing fields
-        missing_fields = []
-        for field in IMPORTANT_EVALUATION_FIELDS:
-            if field not in evidence_map:
-                missing_fields.append(field)
+        # Categorize fields into EXTRACTED, EXPECTED_MISSING, NOT_APPLICABLE
+        expected_fields_found = []
+        expected_fields_missing = []
+        not_applicable_fields = []
+
+        for field in expected_fields:
+            if self._is_field_extracted(field, data, evidence_map):
+                expected_fields_found.append(field)
+            else:
+                expected_fields_missing.append(field)
+
+        for field in ALL_EVALUATION_FIELDS:
+            if field not in expected_fields:
+                if not self._is_field_extracted(field, data, evidence_map):
+                    not_applicable_fields.append(field)
 
         # Deterministic Score Formula
-        score = 100.0
-        if extraction_method == "ocr_fallback":
-            score -= 15.0  # OCR penalty for noise
+        base_score = 100.0
+        ocr_penalty = 15.0 if extraction_method == "ocr_fallback" else 0.0
+        expected_missing_penalty = len(expected_fields_missing) * 10.0
+        
+        # Identity penalty: check company name if not already penalized via expected_missing
+        missing_company_penalty = 0.0
+        if "company_name" not in expected_fields and not (data.get("company", {}).get("name")):
+            missing_company_penalty = 10.0
 
-        score -= (low_count * 10.0)
-        score -= (med_count * 3.0)
+        low_conf_penalty = low_count * 10.0
+        med_conf_penalty = med_count * 3.0
 
-        # Penalty for missing core identity (company name)
-        if "company_name" in missing_fields and not (data.get("company", {}).get("name")):
-            score -= 10.0
+        # Evidence penalty: if zero evidence or if extracted expected fields lack source text
+        evidence_penalty = 0.0
+        if evidence_backed_count == 0 and len(expected_fields_found) > 0:
+            evidence_penalty = 25.0
+        else:
+            unbacked_expected = [
+                f for f in expected_fields_found
+                if f in evidence_map and not evidence_map[f].get("source_text")
+            ]
+            evidence_penalty = min(25.0, len(unbacked_expected) * 5.0)
 
-        if evidence_backed_count == 0:
-            score -= 25.0
+        raw_score = (
+            base_score
+            - ocr_penalty
+            - expected_missing_penalty
+            - missing_company_penalty
+            - low_conf_penalty
+            - med_conf_penalty
+            - evidence_penalty
+        )
+        quality_score = max(0.0, min(100.0, round(raw_score, 1)))
 
-        quality_score = max(0.0, min(100.0, round(score, 1)))
+        scoring_breakdown = {
+            "base_score": base_score,
+            "ocr_penalty": ocr_penalty,
+            "expected_missing_penalty": expected_missing_penalty,
+            "missing_company_penalty": missing_company_penalty,
+            "low_confidence_penalty": low_conf_penalty,
+            "medium_confidence_penalty": med_conf_penalty,
+            "evidence_penalty": evidence_penalty,
+            "final_score": quality_score
+        }
 
         # Determine Review Status
         review_status = "COMPLETED"
-        if extraction_method == "ocr_fallback" or quality_score < 85.0 or low_count > 0 or len(missing_fields) > 7:
+        if (
+            len(expected_fields_missing) > 0
+            or extraction_method == "ocr_fallback"
+            or low_count > 0
+            or evidence_penalty > 0
+            or quality_score < 85.0
+        ):
             review_status = "NEEDS_REVIEW"
 
         quality_summary = {
-            "total_fields": len(IMPORTANT_EVALUATION_FIELDS),
+            "total_fields": len(ALL_EVALUATION_FIELDS),
+            "total_expected_fields": len(expected_fields),
+            "expected_fields_found": len(expected_fields_found),
+            "expected_fields_missing": len(expected_fields_missing),
+            "not_applicable_fields": len(not_applicable_fields),
+            "expected_missing_list": expected_fields_missing,
+            "not_applicable_list": not_applicable_fields,
             "evidence_backed": evidence_backed_count,
             "high_confidence": high_count,
             "medium_confidence": med_count,
             "low_confidence": low_count,
-            "missing_fields": missing_fields,
+            "missing_fields": expected_fields_missing,
             "human_verified": 0,
-            "quality_score": quality_score
+            "quality_score": quality_score,
+            "scoring_breakdown": scoring_breakdown
         }
 
         data["quality_summary"] = quality_summary
-        data["missing_fields"] = missing_fields
+        data["missing_fields"] = expected_fields_missing
         data["confidence_score"] = round(quality_score / 100.0, 2)
 
         if "metadata" not in data or not isinstance(data["metadata"], dict):
@@ -296,14 +433,20 @@ class LLMService:
         doc_type = "Commercial Invoice"
         if "esg" in text_lower or "sustainability compliance" in text_lower or "audit report" in text_lower or "oeko-tex" in text_lower:
             doc_type = "ESG Audit Report"
-        elif "waste" in text_lower or "manifest" in text_lower or "disposal log" in text_lower or "polymer" in text_lower:
+        elif "waste manifest" in text_lower or "waste disposal log" in text_lower or "scanned dispatch receipt" in text_lower or "industrial fuel & waste log manifest" in text_lower or "waste log" in text_lower:
             doc_type = "Waste Manifest"
-        elif "electricity" in text_lower or "tariff invoice" in text_lower or "ht-202" in text_lower or ("kwh" in text_lower and "demand" in text_lower):
+        elif "adversarial" in text_lower or "commercial & utility" in text_lower:
+            doc_type = "Commercial Invoice"
+        elif "state electricity" in text_lower or "electricity distribution" in text_lower or "power factor" in text_lower or "ht-202" in text_lower:
             doc_type = "Electricity Bill"
-        elif "fuel" in text_lower or "diesel" in text_lower or "hsd" in text_lower:
+        elif ("fuel" in text_lower or "diesel" in text_lower or "hsd" in text_lower) and "electricity" not in text_lower:
             doc_type = "Fuel Receipt"
-        elif "water" in text_lower and ("effluent" in text_lower or "freshwater" in text_lower):
+        elif "water" in text_lower and ("effluent" in text_lower or "freshwater" in text_lower) and "electricity" not in text_lower:
             doc_type = "Water Bill"
+        elif "invoice" in text_lower or "commercial" in text_lower or "purchase order" in text_lower:
+            doc_type = "Commercial Invoice"
+        elif "electricity" in text_lower or "kwh" in text_lower:
+            doc_type = "Electricity Bill"
 
         # 2. Company Information (Strict extraction, no hardcoding)
         company_name = None
@@ -318,7 +461,7 @@ class LLMService:
                 company_name = cand
         if not company_name:
             for line in [l.strip() for l in text.splitlines() if len(l.strip()) > 4]:
-                if any(w in line.upper() for w in ["PVT. LTD", "LIMITED", "ENTERPRISES", "INDUSTRIES", "FORGINGS", "TEXTILES", "POLYMERS"]):
+                if any(w in line.upper() for w in ["PVT. LTD", "LIMITED", "ENTERPRISES", "INDUSTRIES", "FORGINGS", "TEXTILES", "POLYMERS", "ENGINEERING"]):
                     clean_line = re.sub(r'^[=\-#\s*]+|[=\-#\s*]+$', '', line).strip()
                     if len(clean_line) < 60:
                         company_name = clean_line
@@ -365,7 +508,9 @@ class LLMService:
 
         # 3. Period & Dates
         billing_month = None
-        month_match = re.search(r'(?:billing month|billing period|month|period)\s*[:\-]?\s*([A-Za-z]+\s*20\d{2}|FY\s*20\d{2}-\d{2,4}|Q[1-4]\s*20\d{2})', text, re.IGNORECASE)
+        month_match = re.search(r'(?:billing month|billing period|reporting period|month|period)\s*[:\-]?\s*([A-Za-z]+\s*20\d{2}|FY\s*20\d{2}-\d{2,4}|Q[1-4]\s*20\d{2}|\d{4}-\d{2}-\d{2}\s*(?:to|-)\s*\d{4}-\d{2}-\d{2})', text, re.IGNORECASE)
+        if not month_match:
+            month_match = re.search(r'(\bFY\s*20\d{2}-\d{2,4}\b)', text, re.IGNORECASE)
         if month_match:
             billing_month = month_match.group(1).strip()
             evidence_list.append({
@@ -385,9 +530,21 @@ class LLMService:
         if period_range_match:
             start_date = period_range_match.group(1)
             end_date = period_range_match.group(2)
+            if not billing_month:
+                billing_month = f"{start_date} to {end_date}"
+                evidence_list.append({
+                    "field": "billing_period",
+                    "value": billing_month,
+                    "unit": None,
+                    "confidence": 0.95,
+                    "confidence_level": "HIGH",
+                    "source_text": period_range_match.group(0).strip(),
+                    "is_verified": False,
+                    "human_corrected_value": None
+                })
 
         issue_date = None
-        issue_match = re.search(r'(?:issue date|date of dispatch|bill date|date)\s*[:\-]\s*(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})', text, re.IGNORECASE)
+        issue_match = re.search(r'(?:issue date|invoice date|date of dispatch|bill date|date)\s*[:\-]\s*(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})', text, re.IGNORECASE)
         if issue_match:
             issue_date = issue_match.group(1)
 
@@ -398,6 +555,8 @@ class LLMService:
             kwh_match = re.search(r'([\d,]+(?:\.\d+)?)\s*kwh\b[^\n]*?(?:active energy|electricity|grid import|billed import|wind power)', text, re.IGNORECASE)
         if not kwh_match:
             kwh_match = re.search(r'(?:total active energy consumption|grid electricity)[ \t]*\n[ \t]*([\d,]+(?:\.\d+)?)[ \t]*\n[ \t]*kwh', text, re.IGNORECASE)
+        if not kwh_match:
+            kwh_match = re.search(r'([\d,]+(?:\.\d+)?)\s*\n[ \t]*kwh\b', text, re.IGNORECASE)
         if kwh_match:
             val_num = self._parse_indian_number(kwh_match.group(1))
             if val_num is not None:
@@ -471,11 +630,13 @@ class LLMService:
                 })
 
         fuel_diesel_liters = None
-        diesel_match = re.search(r'(?:diesel generator backup fuel used|high speed diesel|hsd|generator backup fuel|diesel emergency generator backup)[^\n\r]*?([\d,]+(?:\.\d+)?)\s*(?:liters|lts|ltrs|l)\b', text, re.IGNORECASE)
+        diesel_match = re.search(r'(?:diesel generator backup fuel used|high speed diesel|hsd|generator backup fuel|diesel emergency generator backup)[^\d\n\r]*?([\d,]+(?:\.\d+)?)\s*(?:liters|lts|ltrs|l)\b', text, re.IGNORECASE)
         if not diesel_match:
-            diesel_match = re.search(r'(?:diesel generator backup fuel used|diesel backup)[ \t]*\n[ \t]*([\d,]+(?:\.\d+)?)[ \t]*\n[ \t]*(?:liters|lts)', text, re.IGNORECASE)
+            diesel_match = re.search(r'(?:high speed diesel|hsd|diesel generator backup fuel|generator backup fuel|diesel)[^\d]{0,100}?([\d,]+(?:\.\d+)?)\s*(?:\n|\r|\s)*(?:liters|lts|ltrs|l)\b', text, re.IGNORECASE)
         if not diesel_match:
-            diesel_match = re.search(r'([\d,]+(?:\.\d+)?)\s*(?:liters|lts|ltrs)\b[^\n]*?(?:diesel|hsd|fuel)', text, re.IGNORECASE)
+            diesel_match = re.search(r'([\d,]+(?:\.\d+)?)\s*(?:\n|\r|\s)*(?:liters|lts|ltrs)\b[^\n]*?(?:diesel|hsd|fuel)', text, re.IGNORECASE)
+        if not diesel_match:
+            diesel_match = re.search(r'([\d,]+(?:\.\d+)?)\s*(?:liters|lts|ltrs)\b', text, re.IGNORECASE)
         if diesel_match:
             diesel_val = self._parse_indian_number(diesel_match.group(1))
             if diesel_val is not None:
@@ -494,12 +655,12 @@ class LLMService:
 
 
         total_cost = None
-        cost_match = re.search(r'(?:net total payable amount|total invoice value|total payable amount|net total payable|total amount|invoice value|total im vgig e valu)[^\d\n]*(?:inr|rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)', text, re.IGNORECASE)
+        cost_match = re.search(r'(?:net total payable amount|total invoice value|net invoice total payable amount|total payable amount|net total payable|total amount|invoice value|total im vgig e valu)[^\d\n]*(?:inr|rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)', text, re.IGNORECASE)
         if not cost_match:
             cost_match = re.search(r'(?:net total payable amount|total invoice value)[ \t]*\n[ \t]*(?:-[ \t]*\n[ \t]*)*(?:inr|rs\.?|₹)?[ \t]*([\d,]+(?:\.\d+)?)', text, re.IGNORECASE)
         if cost_match:
             cost_val = self._parse_indian_number(cost_match.group(1))
-            if cost_val is not None and cost_val != electricity_kwh:
+            if cost_val is not None:
                 total_cost = cost_val
                 conf = 0.96 if extraction_method == "pymupdf" else 0.72
                 evidence_list.append({
@@ -517,7 +678,7 @@ class LLMService:
         scope_1_tco2e = None
         s1_match = re.search(r'scope\s*1[^\n\r]*?([\d,]+(?:\.\d+)?)\s*tco2e', text, re.IGNORECASE)
         if not s1_match:
-            s1_match = re.search(r'scope\s*1[ \t\w\-()]*\n[ \t\w\d.,/]*\n[ \t\w\d.,/]*\n[ \t]*([\d,]+(?:\.\d+)?)[ \t]*tco2e', text, re.IGNORECASE)
+            s1_match = re.search(r'scope\s*1(?:[^\n]*\n){1,4}[ \t]*([\d,]+(?:\.\d+)?)\s*tco2e', text, re.IGNORECASE)
         if not s1_match:
             s1_match = re.search(r'(?:scope 1 direct|fuel diesel scope 1 direct emissions)[^\d]*?([\d,]+(?:\.\d+)?)\s*tco2e', text, re.IGNORECASE)
         if s1_match:
@@ -538,7 +699,7 @@ class LLMService:
         scope_2_tco2e = None
         s2_match = re.search(r'scope\s*2[^\n\r]*?([\d,]+(?:\.\d+)?)\s*tco2e', text, re.IGNORECASE)
         if not s2_match:
-            s2_match = re.search(r'scope\s*2[ \t\w\-()]*\n[ \t\w\d.,/]*\n[ \t\w\d.,/]*\n[ \t]*([\d,]+(?:\.\d+)?)[ \t]*tco2e', text, re.IGNORECASE)
+            s2_match = re.search(r'scope\s*2(?:[^\n]*\n){1,4}[ \t]*([\d,]+(?:\.\d+)?)\s*tco2e', text, re.IGNORECASE)
         if not s2_match:
             s2_match = re.search(r'(?:scope 2 indirect)[^\d]*?([\d,]+(?:\.\d+)?)\s*tco2e', text, re.IGNORECASE)
         if s2_match:

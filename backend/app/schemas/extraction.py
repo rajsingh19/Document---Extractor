@@ -62,13 +62,20 @@ class FieldEvidence(BaseModel):
 
 class QualitySummary(BaseModel):
     total_fields: int = Field(0, description="Total important fields evaluated")
+    total_expected_fields: int = Field(0, description="Total expected fields for document type")
+    expected_fields_found: int = Field(0, description="Expected fields present in document")
+    expected_fields_missing: int = Field(0, description="Expected fields missing in document")
+    not_applicable_fields: int = Field(0, description="Fields not applicable for this document type")
+    expected_missing_list: List[str] = Field(default_factory=list, description="List of expected fields missing")
+    not_applicable_list: List[str] = Field(default_factory=list, description="List of not applicable fields")
     evidence_backed: int = Field(0, description="Fields supported by verifiable source text evidence")
     high_confidence: int = Field(0, description="Fields with high confidence (>=0.9)")
     medium_confidence: int = Field(0, description="Fields with medium confidence (0.7-0.89)")
     low_confidence: int = Field(0, description="Fields with low confidence (<0.7)")
-    missing_fields: List[str] = Field(default_factory=list, description="Important fields not present in document")
+    missing_fields: List[str] = Field(default_factory=list, description="Important missing fields (alias for expected_missing_list)")
     human_verified: int = Field(0, description="Fields verified by human reviewer")
     quality_score: float = Field(0.0, ge=0.0, le=100.0, description="Deterministic Extraction Quality Score (0 to 100)")
+    scoring_breakdown: Dict[str, float] = Field(default_factory=dict, description="Transparent deterministic scoring breakdown")
 
 class ExtractionMetadata(BaseModel):
     provider: str = Field("openai", description="'openai' or 'heuristic_fallback'")

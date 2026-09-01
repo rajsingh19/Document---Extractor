@@ -2,8 +2,6 @@ import os
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from backend.app.database.base import Base
-from backend.app.models.document import Document
-from backend.app.models.audit import AuditLog
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./senseible_documents.db")
 
@@ -25,6 +23,9 @@ def get_db():
 
 def init_db():
     """Create all tables and perform lightweight column migrations if needed."""
+    from backend.app.models.document import Document  # noqa: F401
+    from backend.app.models.audit import AuditLog  # noqa: F401
+    from backend.app.models.sustainability_metric import SustainabilityMetric  # noqa: F401
     Base.metadata.create_all(bind=engine)
     
     # Auto-migration for SQLite columns added in Step 3

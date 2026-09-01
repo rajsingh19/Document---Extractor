@@ -5,6 +5,7 @@ from backend.app.models.document import Document
 from backend.app.services.pdf_service import PDFService
 from backend.app.services.ocr_service import OCRService
 from backend.app.services.llm_service import LLMService
+from backend.app.services.normalization_service import NormalizationService
 from backend.app.schemas.extraction import SustainabilityDocumentExtraction
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,7 @@ class ExtractionPipelineService:
         self.pdf_service = PDFService()
         self.ocr_service = OCRService()
         self.llm_service = LLMService()
+        self.normalization_service = NormalizationService()
 
     def process_document(self, db: Session, document_id: int, force_ocr: bool = False) -> Document:
         """
@@ -118,6 +120,13 @@ class ExtractionPipelineService:
             doc.error_message = None
             db.commit()
             db.refresh(doc)
+
+            # Step 6: Automatically normalize structured extraction into format-independent records
+            try:
+                self.normalization_service.normalize_extraction(db, doc)
+            except Exception as norm_err:
+                logger.error(f"Failed to normalize metrics for doc {doc.id}: {norm_err}")
+
             logger.info(f"Successfully processed document ID {doc.id} ({doc.original_filename}).")
             return doc
 
