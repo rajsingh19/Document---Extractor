@@ -93,7 +93,8 @@ class ExtractionPipelineService:
 
             raw_extracted_dict = self.llm_service.extract_sustainability_data(
                 extracted_text,
-                extraction_method=extraction_method
+                extraction_method=extraction_method,
+                routed_document_type=classification_res.document_type
             )
 
             # Step 5: Validate structured JSON with Pydantic
@@ -121,7 +122,7 @@ class ExtractionPipelineService:
             # Save structured data and denormalized summary fields
             doc.structured_data = structured_json
             doc.company_name = validated_data.company.name
-            doc.document_type = classification_res.document_type if classification_res.document_type != "Unknown / Other" else validated_data.document_type
+            doc.document_type = classification_res.document_type
             doc.reporting_period = validated_data.period.billing_month or validated_data.period.issue_date
             doc.confidence_score = validated_data.confidence_score
             doc.quality_score = validated_data.quality_summary.quality_score

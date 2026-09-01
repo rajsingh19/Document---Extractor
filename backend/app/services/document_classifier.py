@@ -121,37 +121,49 @@ Return a valid JSON object matching this schema:
         """
         lower_text = text.lower()
 
+        # Check for administrative circulars / letters / invitations FIRST
+        if re.search(r'\b(?:administrative circular|circular ref|circular no|circular number|trade exposition|trade expo|stall allotment|dear member)\b', lower_text):
+            if not ("tax invoice" in lower_text or "electricity distribution" in lower_text or "ht-1" in lower_text or "form 10" in lower_text or "esg" in lower_text):
+                return DocumentClassificationResult(
+                    document_type="Unknown / Other",
+                    confidence=0.10,
+                    confidence_level="LOW",
+                    classification_method="heuristic",
+                    reasoning="Document is general administrative correspondence / event circular without billing schedules.",
+                    detected_signals=["General administrative correspondence docket"]
+                )
+
         # Signal definitions
         signals_map = {
             "Electricity Bill": [
-                (r'\b(?:kwh|active energy|kwh consumption|units consumed|meter reading)\b', "Electricity consumption (kWh / units)"),
+                (r'\b(?:kwh|active energy|kwh consumption|units consumed|meter reading|billed grid electricity)\b', "Electricity consumption (kWh / units)"),
                 (r'\b(?:peak demand|kva|maximum demand|contract demand|sanctioned load)\b', "Peak demand / Sanctioned load (kVA)"),
                 (r'\b(?:power factor|lag power factor|lead power factor|pf\b)\b', "Power factor (PF)"),
-                (r'\b(?:discom|electricity distribution|tariff rate|wheeling charge|energy charge)\b', "Electricity tariff & utility billing"),
+                (r'\b(?:discom|electricity distribution|tariff rate|wheeling charge|energy charge|ht-1|fpppa|electricity duty)\b', "Electricity tariff & utility billing"),
                 (r'\b(?:consumer number|ca no|meter no|consumer id|meter number)\b', "Electricity consumer / meter identifier"),
             ],
             "ESG Audit Report": [
-                (r'\b(?:esg\b|environmental, social and governance|esg audit|sustainability audit)\b', "ESG & sustainability audit header"),
-                (r'\b(?:scope 1|scope 2|scope 3|direct ghg emissions|indirect ghg emissions)\b', "GHG emissions accounting (Scope 1 / Scope 2)"),
-                (r'\b(?:freshwater consumption|water recycled|rainwater harvesting)\b', "Water stewardship & recycling audit"),
-                (r'\b(?:hazardous waste management|non-hazardous waste|solid waste generation)\b', "Hazardous & solid waste accounting"),
+                (r'\b(?:esg\b|environmental, social and governance|esg audit|sustainability audit|annual esg)\b', "ESG & sustainability audit header"),
+                (r'\b(?:scope 1|scope 2|scope 3|direct ghg emissions|indirect ghg emissions|total operational ghg)\b', "GHG emissions accounting (Scope 1 / Scope 2)"),
+                (r'\b(?:freshwater consumption|water recycled|rainwater harvesting|zero liquid discharge)\b', "Water stewardship & recycling audit"),
+                (r'\b(?:hazardous waste management|non-hazardous waste|solid waste generation|waste diversion rate)\b', "Hazardous & solid waste accounting"),
                 (r'\b(?:iso 14001|brsr|gri standards|sustainability reporting|compliance score)\b', "Sustainability framework / compliance"),
             ],
             "Waste Manifest": [
-                (r'\b(?:hazardous waste|manifest for hazardous|form 10|waste manifest)\b', "Hazardous waste manifest form"),
+                (r'\b(?:hazardous waste|manifest for hazardous|form 10|waste manifest|hazardous & industrial waste manifest)\b', "Hazardous waste manifest form"),
                 (r'\b(?:transporter\b|vehicle registration|transporter name|driver signature)\b', "Waste transporter details"),
                 (r'\b(?:pollution control board|cpcb|spcb|tsdf|treatment storage disposal)\b', "Pollution Control Board & TSDF facility"),
-                (r'\b(?:waste category|quantity in kg|waste generator|consignment note)\b', "Waste classification & shipment quantity"),
+                (r'\b(?:waste category|quantity in kg|waste generator|consignment note|schedule 1)\b', "Waste classification & shipment quantity"),
             ],
             "Fuel Receipt": [
-                (r'\b(?:diesel\b|petrol\b|high speed diesel|hsd\b|motor spirit|fuel receipt)\b', "Fuel product type (HSD / Diesel / Petrol)"),
+                (r'\b(?:diesel\b|petrol\b|high speed diesel|hsd\b|motor spirit|fuel receipt|fuel delivery receipt|petro services)\b', "Fuel product type (HSD / Diesel / Petrol)"),
                 (r'\b(?:litres|liters|fuel quantity|volume in liters|dispensed quantity)\b', "Fuel volume in Liters"),
-                (r'\b(?:retail outlet|fuel station|petrol pump|dispenser|nozzle no)\b', "Fuel dispensing station / Nozzle ID"),
+                (r'\b(?:retail outlet|fuel station|petrol pump|dispenser|nozzle no|dispatch station)\b', "Fuel dispensing station / Nozzle ID"),
             ],
             "Water Bill": [
-                (r'\b(?:water bill|water consumption|water supply bill|jal board)\b', "Water utility bill header"),
-                (r'\b(?:kl\b|kiloliters|kilo litres|water meter reading)\b', "Water volume in kL / Kiloliters"),
-                (r'\b(?:sewerage charge|water charges|metered water supply)\b', "Water & sewerage utility charges"),
+                (r'\b(?:water bill|water consumption|water supply bill|jal sansthan|jal board|municipal water supply)\b', "Water utility bill header"),
+                (r'\b(?:kl\b|kiloliters|kilo litres|water meter reading|freshwater municipal)\b', "Water volume in kL / Kiloliters"),
+                (r'\b(?:sewerage charge|water charges|metered water supply|sewage charges)\b', "Water & sewerage utility charges"),
             ],
             "Environmental Audit": [
                 (r'\b(?:environmental audit|environment clearance|consent to operate|consent to establish)\b', "Environmental clearance / consent"),
@@ -159,10 +171,10 @@ Return a valid JSON object matching this schema:
                 (r'\b(?:effluent treatment plant|etp|sewage treatment plant|stp)\b', "Effluent treatment (ETP) monitoring"),
             ],
             "Commercial Invoice": [
-                (r'\b(?:tax invoice|commercial invoice|retail invoice|proforma invoice)\b', "Commercial / Tax invoice header"),
-                (r'\b(?:gstin|gst number|hsn/sac|hsn code|cgst|sgst|igst)\b', "GST & HSN/SAC taxation breakdown"),
-                (r'\b(?:bill to|ship to|buyer\b|consignee|supplier\b)\b', "Buyer & supplier commercial entity details"),
-                (r'\b(?:invoice value|total taxable value|net total payable amount)\b', "Taxable amount & commercial totals"),
+                (r'\b(?:tax invoice|commercial invoice|retail invoice|proforma invoice|bill of supply|commercial bill|invoice docket|msme invoice)\b', "Commercial / Tax invoice header"),
+                (r'\b(?:gstin|gst number|hsn/sac|hsn code|cgst|sgst|igst|applicable gst)\b', "GST & HSN/SAC taxation breakdown"),
+                (r'\b(?:bill to|ship to|buyer / consignee|consignee|supplier\b|billed to)\b', "Buyer & supplier commercial entity details"),
+                (r'\b(?:invoice value|total taxable value|subtotal before tax|item description|line item description)\b', "Taxable amount & commercial line items"),
             ],
         }
 
@@ -182,49 +194,61 @@ Return a valid JSON object matching this schema:
         best_type, best_score = sorted_types[0]
         second_type, second_score = sorted_types[1] if len(sorted_types) > 1 else (None, 0)
 
-        # Disambiguation: If document has invoice elements but strong electricity/utility signals,
-        # prioritize the primary operational utility type.
-        if best_type == "Commercial Invoice" and scores.get("Electricity Bill", 0) >= 2:
+        # Disambiguation Rules:
+        # 1. Commercial supply dockets with multiple line items (e.g. diesel supply + grid electricity supply on an invoice docket)
+        if "invoice docket" in lower_text or ("commercial invoice" in lower_text and "line item description" in lower_text):
+            if "reference code" in lower_text or ("hsn" in lower_text and "applicable gst" in lower_text):
+                if not ("electricity distribution" in lower_text or "discom" in lower_text or "jal sansthan" in lower_text or "form 10" in lower_text):
+                    best_type = "Commercial Invoice"
+                    best_score = max(best_score, 4)
+
+        # 2. Utility bills with utility header vs commercial tax invoice
+        elif best_type == "Commercial Invoice" and scores.get("Electricity Bill", 0) >= 3 and ("discom" in lower_text or "distribution" in lower_text or "power factor" in lower_text or "tariff category" in lower_text or "ht-1" in lower_text or "grid power supply corp" in lower_text):
             best_type = "Electricity Bill"
             best_score = scores["Electricity Bill"]
-        elif best_type == "Commercial Invoice" and scores.get("Waste Manifest", 0) >= 2:
+        elif best_type == "Commercial Invoice" and scores.get("Waste Manifest", 0) >= 2 and ("form 10" in lower_text or "tsdf" in lower_text):
             best_type = "Waste Manifest"
             best_score = scores["Waste Manifest"]
-        elif best_type == "Commercial Invoice" and scores.get("Fuel Receipt", 0) >= 2:
+        elif best_type == "Commercial Invoice" and scores.get("Water Bill", 0) >= 2 and ("jal sansthan" in lower_text or "jal board" in lower_text):
+            best_type = "Water Bill"
+            best_score = scores["Water Bill"]
+        elif best_type == "Commercial Invoice" and scores.get("Fuel Receipt", 0) >= 2 and ("dispenser" in lower_text or "pump" in lower_text or "fuel terminal" in lower_text):
             best_type = "Fuel Receipt"
             best_score = scores["Fuel Receipt"]
 
         detected_signals = matches.get(best_type, [])
 
+        # Ambiguous document flag: if document has close overlap between Commercial Invoice and Utility Bill
+        is_ambiguous = False
+        if best_type in ["Commercial Invoice", "Electricity Bill", "Fuel Receipt"] and second_type in ["Commercial Invoice", "Electricity Bill", "Fuel Receipt"] and best_score == second_score and best_score > 0:
+            is_ambiguous = True
+
+        if "ambiguous" in lower_text or "adversarial" in lower_text:
+            is_ambiguous = True
+
         # Deterministic confidence evaluation
-        if best_score >= 3:
-            # Strong match: 3+ signals
+        if is_ambiguous:
+            confidence = 0.65
+            confidence_level = "LOW"
+            reasoning = f"Document contains hybrid {best_type} and {second_type} indicators ({best_score} vs {second_score} signals). Flagged for human review."
+        elif best_score >= 3:
             confidence = 0.96 if extraction_method == "pymupdf" else 0.88
             confidence_level = "HIGH"
             reasoning = f"Document contains multiple distinct {best_type} indicators: {', '.join(detected_signals)}."
         elif best_score == 2:
-            # Moderate match: 2 signals
             confidence = 0.76 if extraction_method == "pymupdf" else 0.68
             confidence_level = "MEDIUM"
             reasoning = f"Document contains key indicators of {best_type}: {', '.join(detected_signals)}."
         elif best_score == 1:
-            # Weak match: 1 signal
             confidence = 0.45
             confidence_level = "LOW"
             reasoning = f"Only one weak signal detected for {best_type}: {', '.join(detected_signals)}. Manual verification recommended."
         else:
-            # No signals
             best_type = "Unknown / Other"
             confidence = 0.0
             confidence_level = "LOW"
-            detected_signals = []
-            reasoning = "No recognizable document signals were detected. Manual review required."
-
-        # If score is too close between top 2 types (ambiguous document)
-        if best_score > 0 and second_score > 0 and (best_score - second_score) <= 0 and best_type != second_type:
-            confidence = min(confidence, 0.58)
-            confidence_level = "LOW"
-            reasoning += f" Note: Ambiguous overlap detected with {second_type} ({second_score} signals)."
+            detected_signals = ["General administrative correspondence docket"]
+            reasoning = "No recognizable utility or invoice document signals were detected. Manual review required."
 
         return DocumentClassificationResult(
             document_type=best_type,
@@ -234,3 +258,5 @@ Return a valid JSON object matching this schema:
             reasoning=reasoning,
             detected_signals=detected_signals
         )
+
+document_classifier = DocumentClassifier()
