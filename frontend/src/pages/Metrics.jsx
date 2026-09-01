@@ -15,13 +15,28 @@ import {
   Calendar,
   Layers,
   ChevronRight,
-  Info
+  Info,
+  AlertTriangle,
+  AlertCircle,
+  Eye,
+  ArrowUpRight,
+  ArrowDownRight,
+  Clock
 } from 'lucide-react';
-import { getMetrics, getMetricsSummary, getMetricsTrends, getMetricsChange } from '../services/api';
+import { 
+  getMetrics, 
+  getMetricsSummary, 
+  getMetricsTrends, 
+  getMetricsChange, 
+  getInsights,
+  getDocument 
+} from '../services/api';
 
 export default function Metrics({ stats, documents = [], onSelectDocument }) {
   const [summary, setSummary] = useState(null);
   const [metricsList, setMetricsList] = useState([]);
+  const [insightsList, setInsightsList] = useState([]);
+  const [selectedInsightFilter, setSelectedInsightFilter] = useState('ALL');
   const [selectedTraceMetric, setSelectedTraceMetric] = useState(null);
   
   // Historical Trends State
@@ -45,13 +60,15 @@ export default function Metrics({ stats, documents = [], onSelectDocument }) {
 
   const fetchMetricsOverview = async () => {
     try {
-      const [sumData, metricsRes] = await Promise.all([
+      const [sumData, metricsRes, insightsRes] = await Promise.all([
         getMetricsSummary().catch(() => null),
-        getMetrics().catch(() => ({ metrics: [] }))
+        getMetrics().catch(() => ({ metrics: [] })),
+        getInsights().catch(() => ({ insights: [] }))
       ]);
 
       if (sumData) setSummary(sumData);
       if (metricsRes?.metrics) setMetricsList(metricsRes.metrics);
+      if (insightsRes?.insights) setInsightsList(insightsRes.insights);
     } catch (err) {
       console.error('Error fetching metrics summary:', err);
     }
@@ -145,12 +162,29 @@ export default function Metrics({ stats, documents = [], onSelectDocument }) {
       .join(' ');
   };
 
-  const handleOpenSourceDoc = (docId) => {
-    const targetDoc = documents.find(d => d.id === docId);
+  const handleOpenSourceDoc = async (docId) => {
+    if (!docId) return;
+    let targetDoc = documents.find(d => d.id === docId);
+    if (!targetDoc) {
+      try {
+        targetDoc = await getDocument(docId);
+      } catch (e) {
+        console.error('Error fetching source document:', e);
+      }
+    }
     if (targetDoc && onSelectDocument) {
       onSelectDocument(targetDoc);
     }
   };
+
+  const attentionCount = insightsList.filter(i => i.severity === 'ATTENTION').length;
+  const reviewCount = insightsList.filter(i => i.severity === 'REVIEW').length;
+  const infoCount = insightsList.filter(i => i.severity === 'INFO').length;
+
+  const filteredInsights = insightsList.filter(i => {
+    if (selectedInsightFilter === 'ALL') return true;
+    return i.severity === selectedInsightFilter;
+  });
 
   // Trend graph scaling calculation
   const maxTrendVal = trendData.length > 0 ? Math.max(...trendData.map(d => d.value)) : 100;
@@ -276,7 +310,222 @@ export default function Metrics({ stats, documents = [], onSelectDocument }) {
         </div>
       </div>
 
-      {/* 4. HISTORICAL SUSTAINABILITY TRENDS SECTION */}
+      {/* 4. SUSTAINABILITY INSIGHTS & ACTION FLAGS SECTION */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white">
+          <div>
+            <div className="flex items-center space-x-2">
+              <Sparkles className="w-4 h-4 text-teal-700" />
+              <h3 className="text-xs font-bold text-slate-900">Sustainability Insights & Action Flags</h3>
+              {attentionCount > 0 && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                  {attentionCount} need attention
+                </span>
+              )}
+              {reviewCount > 0 && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-800 border border-rose-200">
+                  {reviewCount} require review
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Deterministic, fact-based period comparisons, threshold alerts, and source-traceable action flags.
+            </p>
+          </div>
+
+          {/* Filter Tabs */}
+          <div className="flex items-center space-x-1.5 text-xs bg-slate-50 p-1 rounded-lg border border-slate-200/80">
+            <button
+              onClick={() => setSelectedInsightFilter('ALL')}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                selectedInsightFilter === 'ALL'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              All ({insightsList.length})
+            </button>
+            <button
+              onClick={() => setSelectedInsightFilter('ATTENTION')}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                selectedInsightFilter === 'ATTENTION'
+                  ? 'bg-amber-50 text-amber-900 border border-amber-200 shadow-2xs font-semibold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Attention ({attentionCount})
+            </button>
+            <button
+              onClick={() => setSelectedInsightFilter('REVIEW')}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                selectedInsightFilter === 'REVIEW'
+                  ? 'bg-rose-50 text-rose-900 border border-rose-200 shadow-2xs font-semibold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Review ({reviewCount})
+            </button>
+            <button
+              onClick={() => setSelectedInsightFilter('INFO')}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                selectedInsightFilter === 'INFO'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Info ({infoCount})
+            </button>
+          </div>
+        </div>
+
+        <div className="p-5">
+          {filteredInsights.length === 0 ? (
+            <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-8 text-center text-xs space-y-2">
+              <CheckCircle2 className="w-6 h-6 text-emerald-600 mx-auto" />
+              <p className="font-semibold text-slate-800">No active insight flags</p>
+              <p className="text-slate-400 max-w-sm mx-auto">
+                All metrics are within standard operating thresholds and no documents require immediate human review.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {filteredInsights.map((ins, idx) => {
+                const isAttention = ins.severity === 'ATTENTION';
+                const isReview = ins.severity === 'REVIEW';
+
+                // Subtle border & header styling
+                const cardBorder = isAttention
+                  ? 'border-amber-200/90 bg-amber-50/20'
+                  : isReview
+                  ? 'border-rose-200/90 bg-rose-50/20'
+                  : 'border-slate-200 bg-white';
+
+                const badgeStyle = isAttention
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : isReview
+                  ? 'bg-rose-50 text-rose-800 border-rose-200'
+                  : 'bg-slate-100 text-slate-700 border-slate-200';
+
+                return (
+                  <div
+                    key={idx}
+                    className={`border rounded-xl p-4 flex flex-col justify-between space-y-3 transition-shadow hover:shadow-2xs ${cardBorder}`}
+                  >
+                    <div>
+                      {/* Top Header */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center space-x-1.5">
+                          {getDocIcon(ins.metric_type)}
+                          <div>
+                            <span className="font-bold text-slate-900 text-xs block leading-tight">
+                              {ins.metric_type ? formatMetricLabel(ins.metric_type) : (ins.category === 'NEEDS_REVIEW' ? 'Document Review' : 'Operational Flag')}
+                            </span>
+                            {ins.company_name && (
+                              <span className="text-[10px] text-slate-400 block truncate max-w-[140px]">
+                                {ins.company_name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-1 shrink-0">
+                          {ins.percentage_change !== null && ins.percentage_change !== undefined && (
+                            <span className={`inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                              ins.percentage_change > 0 
+                                ? (isAttention ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-800')
+                                : 'bg-slate-100 text-slate-700'
+                            }`}>
+                              {ins.percentage_change > 0 ? `↑ ${ins.percentage_change}%` : `↓ ${Math.abs(ins.percentage_change)}%`}
+                            </span>
+                          )}
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${badgeStyle}`}>
+                            {ins.severity}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Message */}
+                      <p className="text-xs text-slate-700 leading-relaxed font-medium">
+                        {ins.message}
+                      </p>
+
+                      {/* Threshold Note */}
+                      {ins.threshold_note && (
+                        <div className="mt-2 text-[10px] text-slate-500 bg-slate-50 border border-slate-200/80 rounded px-2 py-1 font-mono">
+                          {ins.threshold_note}
+                        </div>
+                      )}
+
+                      {/* Numeric Data Breakdown */}
+                      {(ins.current_value !== null && ins.current_value !== undefined) && (
+                        <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                          <div>
+                            <span className="text-[10px] text-slate-400 block">Current</span>
+                            <span className="font-semibold text-slate-800">
+                              {Number(ins.current_value).toLocaleString()} {ins.unit}
+                            </span>
+                          </div>
+                          {ins.previous_value !== null && ins.previous_value !== undefined && (
+                            <div className="text-right">
+                              <span className="text-[10px] text-slate-400 block">Previous</span>
+                              <span className="font-semibold text-slate-600">
+                                {Number(ins.previous_value).toLocaleString()} {ins.unit}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {ins.quality_score !== null && ins.quality_score !== undefined && (
+                        <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                          <span>Quality Score:</span>
+                          <span className="font-bold text-slate-800">{ins.quality_score}/100</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer Actions: Source Traceability */}
+                    <div className="pt-2 border-t border-slate-100/80 flex items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center space-x-2">
+                        {ins.source_document_id && (
+                          <button
+                            onClick={() => handleOpenSourceDoc(ins.source_document_id)}
+                            className="inline-flex items-center space-x-1 text-[11px] text-teal-700 hover:text-teal-900 font-semibold transition-colors cursor-pointer"
+                          >
+                            <FileText className="w-3 h-3" />
+                            <span>{ins.category === 'NEEDS_REVIEW' ? 'Review Document' : `Doc #${ins.source_document_id}`}</span>
+                          </button>
+                        )}
+                        {ins.previous_source_document_id && (
+                          <button
+                            onClick={() => handleOpenSourceDoc(ins.previous_source_document_id)}
+                            className="inline-flex items-center space-x-1 text-[10px] text-slate-400 hover:text-slate-700 font-medium transition-colors cursor-pointer"
+                          >
+                            <span>Prev #{ins.previous_source_document_id}</span>
+                          </button>
+                        )}
+                        {ins.category === 'MISSING_DATA' && (
+                          <span className="text-[10px] text-slate-400">
+                            Period: {ins.period || 'Latest'}
+                          </span>
+                        )}
+                      </div>
+
+                      {ins.period && (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {ins.period}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 5. HISTORICAL SUSTAINABILITY TRENDS SECTION */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white">
           <div>

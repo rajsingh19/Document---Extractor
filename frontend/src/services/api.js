@@ -118,4 +118,9 @@ export const updateDocumentClassification = async (documentId, documentType, not
   return response.data;
 };
 
+export const getInsights = async (params = {}) => {
+  const response = await api.get('/insights', { params });
+  return response.data;
+};
+
 export default api;

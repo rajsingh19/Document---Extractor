@@ -27,6 +27,7 @@ from backend.app.services.extraction_service import ExtractionPipelineService
 from backend.app.services.ocr_service import OCRService
 from backend.app.services.llm_service import LLMService
 from backend.app.services.normalization_service import NormalizationService
+from backend.app.services.insights_service import insights_service
 from backend.app.utils.helpers import generate_unique_filename, parse_period_key
 from backend.app.utils.sample_generator import (
     generate_sample_electricity_bill,
@@ -742,6 +743,29 @@ def get_metrics_change(
         "absolute_change": abs_change,
         "percentage_change": pct_change
     }
+
+@router.get("/insights")
+def get_sustainability_insights(
+    company: Optional[str] = Query(None, description="Filter insights by company name"),
+    severity: Optional[str] = Query(None, description="Filter insights by severity (INFO, ATTENTION, REVIEW)"),
+    metric_type: Optional[str] = Query(None, description="Filter insights by metric type"),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate deterministic, explainable sustainability insights across stored documents and metrics.
+    """
+    insights = insights_service.generate_metric_insights(
+        db=db,
+        company=company,
+        severity=severity,
+        metric_type=metric_type
+    )
+    return {
+        "count": len(insights),
+        "total": len(insights),
+        "insights": [i.model_dump() for i in insights]
+    }
+
 
 @router.get("/documents/{document_id}/audit-trail")
 def get_audit_trail(document_id: int, db: Session = Depends(get_db)):
