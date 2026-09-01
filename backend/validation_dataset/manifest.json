@@ -1,0 +1,302 @@
+[
+  {
+    "filename": "01_electricity_bills/01_clean_electricity_bill.pdf",
+    "document_name": "01 Clean Electricity Bill",
+    "expected_type": "Electricity Bill",
+    "expected_fields": {
+      "company_name": "Shree Balaji Components Pvt. Ltd.",
+      "electricity_kwh": 82450.0,
+      "peak_demand_kva_kw": 215.5,
+      "power_factor": 0.97,
+      "total_energy_cost_inr": 648275.5
+    },
+    "expected_null_fields": [
+      "water_consumption_kl",
+      "hazardous_waste_kg",
+      "recycled_water_kl"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Baseline clean digital electricity bill with demand, power factor, and charges."
+  },
+  {
+    "filename": "01_electricity_bills/02_indian_format_electricity_bill.pdf",
+    "document_name": "02 Indian Format Electricity Bill",
+    "expected_type": "Electricity Bill",
+    "expected_fields": {
+      "company_name": "Omkar Textile Processing MSME",
+      "electricity_kwh": 125500.0,
+      "renewable_energy_kwh": 15000.0,
+      "fuel_diesel_liters": 800.0,
+      "peak_demand_kva_kw": 2450.0,
+      "total_energy_cost_inr": 1245780.5
+    },
+    "expected_null_fields": [
+      "water_consumption_kl",
+      "hazardous_waste_kg"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Test Indian comma number formatting (1,25,500.00 kWh, 2,450.00 kVA, Rs. 12,45,780.50)."
+  },
+  {
+    "filename": "01_electricity_bills/03_missing_fields_electricity_bill.pdf",
+    "document_name": "03 Missing Fields Electricity Bill",
+    "expected_type": "Electricity Bill",
+    "expected_fields": {
+      "company_name": "Pragati Machine Tools",
+      "electricity_kwh": 45200.0,
+      "total_energy_cost_inr": 341712.0
+    },
+    "expected_null_fields": [
+      "peak_demand_kva_kw",
+      "power_factor",
+      "renewable_energy_kwh",
+      "fuel_diesel_liters",
+      "water_consumption_kl",
+      "hazardous_waste_kg"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Ensure missing optional fields remain null without hallucination."
+  },
+  {
+    "filename": "02_fuel_receipts/04_clean_fuel_receipt.pdf",
+    "document_name": "04 Clean Fuel Receipt",
+    "expected_type": "Fuel Receipt",
+    "expected_fields": {
+      "company_name": "Kaveri Auto Parts",
+      "fuel_diesel_liters": 850.5,
+      "total_energy_cost_inr": 77608.13
+    },
+    "expected_null_fields": [
+      "electricity_kwh",
+      "water_consumption_kl",
+      "hazardous_waste_kg"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Clean commercial fuel delivery receipt with quantity, unit rate, and total."
+  },
+  {
+    "filename": "02_fuel_receipts/05_confusing_numbers_fuel_receipt.pdf",
+    "document_name": "05 Confusing Numbers Fuel Receipt",
+    "expected_type": "Fuel Receipt",
+    "expected_fields": {
+      "company_name": "Kaveri Auto Parts",
+      "fuel_diesel_liters": 1200.0,
+      "total_energy_cost_inr": 127500.0
+    },
+    "expected_null_fields": [
+      "electricity_kwh",
+      "water_consumption_kl",
+      "hazardous_waste_kg"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Ensure system does not confuse invoice number INV-998877 or HSN 27101930 with fuel quantity or monetary total."
+  },
+  {
+    "filename": "03_water_bills/06_industrial_water_bill.pdf",
+    "document_name": "06 Industrial Water Bill",
+    "expected_type": "Water Bill",
+    "expected_fields": {
+      "company_name": "Ganga Foods Processing Unit",
+      "water_consumption_kl": 8450.0,
+      "recycled_water_kl": 2100.0
+    },
+    "expected_null_fields": [
+      "electricity_kwh",
+      "hazardous_waste_kg",
+      "fuel_diesel_liters"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Industrial water bill with distinct freshwater and recycled effluent volumes."
+  },
+  {
+    "filename": "03_water_bills/07_missing_recycled_water_bill.pdf",
+    "document_name": "07 Missing Recycled Water Bill",
+    "expected_type": "Water Bill",
+    "expected_fields": {
+      "company_name": "Yamuna Beverages MSME",
+      "water_consumption_kl": 6750.0
+    },
+    "expected_null_fields": [
+      "recycled_water_kl",
+      "electricity_kwh",
+      "hazardous_waste_kg",
+      "fuel_diesel_liters"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Ensure recycled water remains null when not reported."
+  },
+  {
+    "filename": "04_commercial_invoices/08_material_invoice.pdf",
+    "document_name": "08 Manufacturing Material Invoice",
+    "expected_type": "Commercial Invoice",
+    "expected_fields": {
+      "company_name": "Rajasthan Precision Metals"
+    },
+    "expected_null_fields": [
+      "electricity_kwh",
+      "fuel_diesel_liters",
+      "water_consumption_kl",
+      "hazardous_waste_kg"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Manufacturing raw materials commercial invoice with multi-item table."
+  },
+  {
+    "filename": "04_commercial_invoices/09_indian_format_invoice.pdf",
+    "document_name": "09 Indian Currency Formatted Invoice",
+    "expected_type": "Commercial Invoice",
+    "expected_fields": {
+      "company_name": "Mahalaxmi Heavy Engineering"
+    },
+    "expected_null_fields": [
+      "electricity_kwh",
+      "water_consumption_kl",
+      "hazardous_waste_kg"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Heavy engineering commercial invoice with Indian currency comma format (Rs. 1,25,000, Rs. 2,48,750, Rs. 4,92,200)."
+  },
+  {
+    "filename": "04_commercial_invoices/10_sustainability_materials_invoice.pdf",
+    "document_name": "10 Sustainability Materials Invoice",
+    "expected_type": "Commercial Invoice",
+    "expected_fields": {
+      "company_name": "EcoPack Manufacturing MSME"
+    },
+    "expected_null_fields": [
+      "electricity_kwh",
+      "water_consumption_kl"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Commercial materials invoice containing recycled steel and packaging without being falsely classified as an ESG report."
+  },
+  {
+    "filename": "05_waste_manifests/11_clean_waste_manifest.pdf",
+    "document_name": "11 Clean Waste Manifest",
+    "expected_type": "Waste Manifest",
+    "expected_fields": {
+      "company_name": "Narmada Chemical Products",
+      "hazardous_waste_kg": 3250.0,
+      "non_hazardous_waste_kg": 460.0
+    },
+    "expected_null_fields": [
+      "electricity_kwh",
+      "water_consumption_kl"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Statutory Form 10 hazardous waste manifest with TSDF and schedule categories."
+  },
+  {
+    "filename": "05_waste_manifests/12_missing_quantities_waste_manifest.pdf",
+    "document_name": "12 Missing Quantities Waste Manifest",
+    "expected_type": "Waste Manifest",
+    "expected_fields": {
+      "company_name": "Godavari Industrial Chemicals",
+      "hazardous_waste_kg": 1850.0,
+      "non_hazardous_waste_kg": 420.0
+    },
+    "expected_null_fields": [
+      "electricity_kwh",
+      "water_consumption_kl"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Waste manifest with an omitted quantity for spent solvent (must remain null)."
+  },
+  {
+    "filename": "06_esg_reports/13_multipage_esg_report.pdf",
+    "document_name": "13 Multi-Page ESG Audit Report",
+    "expected_type": "ESG Audit Report",
+    "expected_fields": {
+      "company_name": "Himalayan Manufacturing Industries",
+      "electricity_kwh": 340000.0,
+      "water_consumption_kl": 42800.0,
+      "recycled_water_kl": 36380.0,
+      "hazardous_waste_kg": 4200.0,
+      "scope_1_direct_tco2e": 7.5,
+      "scope_2_indirect_tco2e": 58.4,
+      "total_ghg_emissions_tco2e": 65.9,
+      "compliance_status": "Compliant"
+    },
+    "expected_null_fields": [],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Comprehensive multi-page ESG audit report testing cross-page extraction, scope 1/2 GHG, water recycling, and compliance status."
+  },
+  {
+    "filename": "07_scanned_documents/14_scanned_fuel_receipt.pdf",
+    "document_name": "14 Scanned Fuel Receipt",
+    "expected_type": "Fuel Receipt",
+    "expected_fields": {
+      "company_name": "Shree Balaji Components Pvt. Ltd.",
+      "fuel_diesel_liters": 450.0,
+      "total_energy_cost_inr": 41062.5
+    },
+    "expected_null_fields": [
+      "electricity_kwh",
+      "water_consumption_kl"
+    ],
+    "expected_extraction_method": "ocr_fallback",
+    "test_purpose": "Scanned image-based fuel cash receipt requiring OCR fallback and human review trigger."
+  },
+  {
+    "filename": "07_scanned_documents/15_low_quality_scanned_waste_manifest.pdf",
+    "document_name": "15 Low Quality Scanned Waste Manifest",
+    "expected_type": "Waste Manifest",
+    "expected_fields": {
+      "company_name": "Narmada Chemical Products",
+      "hazardous_waste_kg": 1250.0
+    },
+    "expected_null_fields": [
+      "electricity_kwh",
+      "water_consumption_kl"
+    ],
+    "expected_extraction_method": "ocr_fallback",
+    "test_purpose": "Degraded low-resolution noisy scan testing OCR limitations, low confidence penalty, and review detection."
+  },
+  {
+    "filename": "08_edge_cases/16_ambiguous_electricity_invoice.pdf",
+    "document_name": "16 Ambiguous Electricity Invoice",
+    "expected_type": "Electricity Bill",
+    "expected_fields": {
+      "company_name": "Tara Engineering Works",
+      "electricity_kwh": 35000.0,
+      "peak_demand_kva_kw": 120.0
+    },
+    "expected_null_fields": [
+      "water_consumption_kl",
+      "hazardous_waste_kg"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Commercial invoice format with electricity utility billing items testing dominant purpose classification."
+  },
+  {
+    "filename": "08_edge_cases/17_unknown_correspondence.pdf",
+    "document_name": "17 Unknown Correspondence Docket",
+    "expected_type": "Unknown / Other",
+    "expected_fields": {},
+    "expected_null_fields": [
+      "electricity_kwh",
+      "fuel_diesel_liters",
+      "water_consumption_kl",
+      "hazardous_waste_kg"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "General business correspondence without environmental/sustainability metrics."
+  },
+  {
+    "filename": "08_edge_cases/18_adversarial_numeric_docket.pdf",
+    "document_name": "18 Adversarial Numeric Docket",
+    "expected_type": "Commercial Invoice",
+    "expected_fields": {
+      "company_name": "Bharat Heavy Engineering Pvt. Ltd.",
+      "electricity_kwh": 100000.0,
+      "fuel_diesel_liters": 1000.0,
+      "total_energy_cost_inr": 100000.0
+    },
+    "expected_null_fields": [
+      "water_consumption_kl",
+      "hazardous_waste_kg"
+    ],
+    "expected_extraction_method": "pymupdf",
+    "test_purpose": "Adversarial numbers docket testing disambiguation of monetary totals (Rs. 1,00,000), electricity (100,000 kWh), fuel (1,000 L), PO numbers, and HSN codes."
+  }
+]
