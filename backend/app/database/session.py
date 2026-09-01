@@ -44,6 +44,8 @@ def init_db():
                 conn.execute(text("ALTER TABLE documents ADD COLUMN field_corrections JSON"))
             if "file_hash" not in existing_cols:
                 conn.execute(text("ALTER TABLE documents ADD COLUMN file_hash VARCHAR(64)"))
+            if "classification" not in existing_cols:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN classification JSON"))
                 
             conn.commit()
         except Exception as e:

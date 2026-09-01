@@ -20,7 +20,8 @@ from backend.app.schemas.document import (
     ProcessDocumentRequest,
     FieldVerifyRequest,
     FieldCorrectionRequest,
-    ReviewStatusRequest
+    ReviewStatusRequest,
+    ClassificationUpdateRequest
 )
 from backend.app.services.extraction_service import ExtractionPipelineService
 from backend.app.services.ocr_service import OCRService
@@ -429,6 +430,77 @@ def update_review_status(
         normalization_service.normalize_extraction(db, doc)
     except Exception as e:
         print(f"Notice: Normalization after status update failed: {e}")
+    return doc
+
+@router.put("/documents/{document_id}/classification", response_model=DocumentResponse)
+def update_classification(
+    document_id: int,
+    request: ClassificationUpdateRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Manually correct or update document classification.
+    Preserves original AI classification in audit trail, updates expected fields mapping,
+    re-evaluates deterministic quality score, and re-normalizes sustainability metrics.
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    old_doc_type = doc.document_type or "Unknown / Other"
+    new_doc_type = request.document_type
+
+    doc.document_type = new_doc_type
+
+    # Update classification metadata
+    classification = dict(doc.classification or {})
+    classification["document_type"] = new_doc_type
+    classification["classification_method"] = "human"
+    classification["confidence"] = 1.0
+    classification["confidence_level"] = "HIGH"
+    classification["conflict"] = False
+    classification["reasoning"] = request.notes or f"Manually classified as {new_doc_type} by human reviewer."
+    doc.classification = classification
+
+    # Audit trail entry
+    audit_entry = AuditLog(
+        document_id=doc.id,
+        field_name="classification",
+        original_ai_value=old_doc_type,
+        corrected_value=new_doc_type,
+        action="classification_change",
+        notes=request.notes or f"Human reviewer changed classification from {old_doc_type} to {new_doc_type}"
+    )
+    db.add(audit_entry)
+
+    # Recalculate deterministic quality score based on newly expected fields
+    if doc.structured_data:
+        structured = doc.structured_data
+        structured["document_type"] = new_doc_type
+        evidence_list = structured.get("evidence", [])
+        
+        # Calculate new quality score for the updated document type
+        quality_res = llm_service.calculate_deterministic_quality_score(
+            doc_type=new_doc_type,
+            data=structured,
+            evidence=evidence_list,
+            extraction_method=doc.extraction_method or "pymupdf",
+            is_scanned_ocr=(doc.extraction_method == "ocr_fallback")
+        )
+        doc.quality_score = quality_res["quality_score"]
+        doc.quality_summary = quality_res
+        structured["quality_summary"] = quality_res
+        doc.structured_data = structured
+
+    db.commit()
+    db.refresh(doc)
+
+    # Re-normalize sustainability metrics for the new document type
+    try:
+        normalization_service.normalize_extraction(db, doc)
+    except Exception as e:
+        print(f"Notice: Normalization after classification update failed: {e}")
+
     return doc
 
 @router.post("/documents/{document_id}/normalize")

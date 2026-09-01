@@ -110,4 +110,12 @@ export const normalizeDocument = async (documentId) => {
   return response.data;
 };
 
+export const updateDocumentClassification = async (documentId, documentType, notes = null) => {
+  const response = await api.put(`/documents/${documentId}/classification`, {
+    document_type: documentType,
+    notes: notes,
+  });
+  return response.data;
+};
+
 export default api;

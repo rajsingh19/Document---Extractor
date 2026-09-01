@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import ExtractionTable from '../components/ExtractionTable';
 import EvidenceSection from '../components/EvidenceSection';
-import { verifyField, correctField, updateReviewStatus, getAuditTrail, processDocument, deleteDocument } from '../services/api';
+import { verifyField, correctField, updateReviewStatus, getAuditTrail, processDocument, deleteDocument, updateDocumentClassification } from '../services/api';
 
 export default function DocumentDetail({
   document: initialDoc,
@@ -36,9 +36,14 @@ export default function DocumentDetail({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [showAllEvidenceModal, setShowAllEvidenceModal] = useState(false);
+  const [showTypeModal, setShowTypeModal] = useState(false);
+  const [newDocType, setNewDocType] = useState(initialDoc?.document_type || 'Electricity Bill');
+  const [typeNotes, setTypeNotes] = useState('');
+  const [showReasoning, setShowReasoning] = useState(false);
 
   useEffect(() => {
     setDoc(initialDoc);
+    if (initialDoc?.document_type) setNewDocType(initialDoc.document_type);
     if (initialDoc?.id) {
       loadAuditTrail(initialDoc.id);
     }
@@ -138,6 +143,22 @@ export default function DocumentDetail({
     } catch (err) {
       console.error('Delete failed:', err);
       alert('Failed to delete document.');
+    }
+  };
+
+  const handleSaveClassification = async () => {
+    setIsSubmitting(true);
+    try {
+      const updated = await updateDocumentClassification(doc.id, newDocType, typeNotes);
+      setDoc(updated);
+      setShowTypeModal(false);
+      loadAuditTrail(doc.id);
+      if (onDocumentUpdated) onDocumentUpdated(updated);
+    } catch (err) {
+      console.error('Failed to change document type:', err);
+      alert('Failed to update classification.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -275,9 +296,27 @@ export default function DocumentDetail({
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {doc.original_filename} &bull; Extracted via {doc.extraction_method === 'ocr_fallback' ? 'Tesseract OCR Fallback' : 'PyMuPDF Engine'}
-              </p>
+              
+              {/* Classification Subtitle */}
+              <div className="flex items-center space-x-2 text-xs text-slate-500 mt-1 flex-wrap">
+                <span>{doc.original_filename}</span>
+                <span>&bull;</span>
+                <span className="font-medium text-slate-700">
+                  {doc.classification?.classification_method === 'human' ? (
+                    <span className="text-purple-700 font-semibold">Human corrected classification</span>
+                  ) : (
+                    <span>
+                      Classified as <strong className="text-slate-800">{doc.document_type || 'Unknown'}</strong> ({Math.round((doc.classification?.confidence || 0.9) * 100)}% confidence • AI)
+                    </span>
+                  )}
+                </span>
+                <button
+                  onClick={() => setShowTypeModal(true)}
+                  className="px-2 py-0.5 text-[11px] text-teal-700 hover:text-teal-900 font-medium border border-teal-200 rounded hover:bg-teal-50 transition-colors"
+                >
+                  Change type
+                </button>
+              </div>
             </div>
 
             <div className="flex items-center space-x-3 text-xs text-slate-500 shrink-0">
@@ -295,6 +334,25 @@ export default function DocumentDetail({
           </div>
         </div>
 
+        {/* CLASSIFICATION CONFLICT ALERT (if classifier and extractor disagreed) */}
+        {doc.classification?.conflict && (
+          <div className="p-4 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 flex items-start space-x-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-slate-900">Document classification conflict detected</p>
+              <p className="text-slate-600 mt-0.5">
+                Automatic classifier identified this document as <strong>{doc.classification.document_type}</strong>, but extraction detected <strong>{doc.classification.extractor_document_type || 'a different format'}</strong>. Please review and confirm the correct document type.
+              </p>
+              <button
+                onClick={() => setShowTypeModal(true)}
+                className="mt-2 px-3 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded-md font-semibold text-xs transition-colors shadow-2xs"
+              >
+                Review & Confirm Document Type
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* SECTION 1: OVERVIEW DASHBOARD */}
         {activeSection === 'overview' && (
           <div className="space-y-5">
@@ -304,11 +362,19 @@ export default function DocumentDetail({
               
               {/* Left Card: Document Information */}
               <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
-                <div className="flex items-center space-x-2 pb-3.5 border-b border-slate-100">
-                  <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                    <FileText className="w-3.5 h-3.5" />
+                <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                      <FileText className="w-3.5 h-3.5" />
+                    </div>
+                    <h3 className="text-xs font-semibold text-slate-900">Document Information</h3>
                   </div>
-                  <h3 className="text-xs font-semibold text-slate-900">Document Information</h3>
+                  <button
+                    onClick={() => setShowTypeModal(true)}
+                    className="text-[11px] text-teal-700 hover:text-teal-900 font-medium"
+                  >
+                    Change
+                  </button>
                 </div>
 
                 <div className="pt-3 space-y-2.5 text-xs">
@@ -322,7 +388,16 @@ export default function DocumentDetail({
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500">Document Type</span>
-                    <span className="font-semibold text-slate-900 text-right">{doc.document_type || '—'}</span>
+                    <span className="font-semibold text-slate-900 text-right flex items-center gap-1.5">
+                      {doc.document_type || '—'}
+                      <span className={`px-1.5 py-0.2 rounded text-[9px] font-semibold ${
+                        doc.classification?.classification_method === 'human'
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-teal-50 text-teal-700 border border-teal-200'
+                      }`}>
+                        {doc.classification?.classification_method === 'human' ? 'Human' : 'AI'}
+                      </span>
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500">Billing Period</span>
@@ -336,6 +411,34 @@ export default function DocumentDetail({
                     <span className="text-slate-500">Facility / Address</span>
                     <span className="font-semibold text-slate-900 text-right max-w-[200px] truncate" title={company.address}>{company.address || '—'}</span>
                   </div>
+
+                  {/* Expandable Explanation of Classification */}
+                  {doc.classification && (
+                    <div className="pt-2 border-t border-slate-100">
+                      <button
+                        onClick={() => setShowReasoning(!showReasoning)}
+                        className="text-[11px] text-teal-700 hover:text-teal-900 font-medium flex items-center justify-between w-full"
+                      >
+                        <span>Why was this classified as {doc.document_type || 'this document'}?</span>
+                        <span>{showReasoning ? '▲' : '▼'}</span>
+                      </button>
+                      {showReasoning && (
+                        <div className="mt-2 bg-slate-50 border border-slate-200/80 rounded-lg p-3 text-[11px] space-y-1.5">
+                          <p className="text-slate-600">{doc.classification.reasoning}</p>
+                          {doc.classification.detected_signals?.length > 0 && (
+                            <div>
+                              <p className="font-semibold text-slate-700 mt-1">Signals present in document:</p>
+                              <ul className="list-disc list-inside text-slate-600 space-y-0.5 mt-0.5">
+                                {doc.classification.detected_signals.map((sig, i) => (
+                                  <li key={i}>{sig}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -826,6 +929,84 @@ export default function DocumentDetail({
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CHANGE DOCUMENT TYPE MODAL */}
+      {showTypeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+              <div className="flex items-center space-x-2">
+                <FileText className="w-4 h-4 text-teal-700" />
+                <h3 className="text-xs font-bold text-slate-900">Change Document Classification</h3>
+              </div>
+              <button
+                onClick={() => setShowTypeModal(false)}
+                disabled={isSubmitting}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1.5">
+                  Select Document Type
+                </label>
+                <select
+                  value={newDocType}
+                  onChange={(e) => setNewDocType(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-teal-700 font-medium cursor-pointer"
+                >
+                  <option value="Electricity Bill">Electricity Bill</option>
+                  <option value="Fuel Receipt">Fuel Receipt</option>
+                  <option value="Water Bill">Water Bill</option>
+                  <option value="Waste Manifest">Waste Manifest</option>
+                  <option value="ESG Audit Report">ESG Audit Report</option>
+                  <option value="Environmental Audit">Environmental Audit</option>
+                  <option value="Commercial Invoice">Commercial Invoice</option>
+                  <option value="Unknown / Other">Unknown / Other</option>
+                </select>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Changing the document type re-routes expected fields, recalculates the deterministic quality score, and re-normalizes portfolio records.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1.5">
+                  Reviewer Notes (Optional)
+                </label>
+                <textarea
+                  value={typeNotes}
+                  onChange={(e) => setTypeNotes(e.target.value)}
+                  placeholder="Reason for manual document type reclassification..."
+                  rows={2}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-teal-700 placeholder:text-slate-400"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTypeModal(false)}
+                  disabled={isSubmitting}
+                  className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveClassification}
+                  disabled={isSubmitting}
+                  className="px-4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-semibold shadow-xs disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Updating...' : 'Save & Re-evaluate'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

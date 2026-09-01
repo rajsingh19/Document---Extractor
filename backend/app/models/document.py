@@ -36,6 +36,9 @@ class Document(Base):
     document_type = Column(String(100), nullable=True, index=True)
     reporting_period = Column(String(100), nullable=True)
     confidence_score = Column(Float, default=0.0)
+
+    # Classification metadata (document_type, confidence, reasoning, method, conflict)
+    classification = Column(JSON, nullable=True)
     
     # Key Sustainability Summary Fields (for fast analytics/KPIs)
     total_energy_kwh = Column(Float, nullable=True)
@@ -77,6 +80,7 @@ class Document(Base):
             "field_corrections": self.field_corrections,
             "company_name": self.company_name,
             "document_type": self.document_type,
+            "classification": self.classification,
             "reporting_period": self.reporting_period,
             "confidence_score": self.confidence_score,
             "total_energy_kwh": self.total_energy_kwh,

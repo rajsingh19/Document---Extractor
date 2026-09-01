@@ -19,6 +19,7 @@ class DocumentResponse(DocumentBase):
     field_corrections: Optional[Dict[str, Any]] = None
     company_name: Optional[str] = None
     document_type: Optional[str] = None
+    classification: Optional[Dict[str, Any]] = None
     reporting_period: Optional[str] = None
     confidence_score: float = 0.0
     total_energy_kwh: Optional[float] = None
@@ -62,12 +63,16 @@ class ProcessDocumentRequest(BaseModel):
     force_ocr: bool = False
 
 class FieldVerifyRequest(BaseModel):
-    field_name: str = Field(..., description="Name of field to verify")
+    field_name: str
 
 class FieldCorrectionRequest(BaseModel):
-    field_name: str = Field(..., description="Name of field being corrected")
-    corrected_value: Any = Field(..., description="New corrected value from human reviewer")
-    unit: Optional[str] = Field(None, description="Optional unit of measurement")
+    field_name: str
+    corrected_value: Any
+    unit: Optional[str] = None
+
+class ClassificationUpdateRequest(BaseModel):
+    document_type: str
+    notes: Optional[str] = None
 
 class ReviewStatusRequest(BaseModel):
     review_status: str = Field(..., description="'COMPLETED', 'NEEDS_REVIEW', or 'VERIFIED'")

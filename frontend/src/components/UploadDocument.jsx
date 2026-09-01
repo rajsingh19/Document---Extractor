@@ -12,10 +12,11 @@ export default function UploadDocument({ onUploadSuccess, onCancel }) {
   const fileInputRef = useRef(null);
 
   const steps = [
-    'Reading document',
-    'Extracting information',
-    'Checking extracted data',
-    'Saving results'
+    'Document uploaded',
+    'Identifying document type & routing expected fields...',
+    'Reading document and extracting data...',
+    'Checking extracted data and evidence...',
+    'Ready for review'
   ];
 
   const handleDragOver = (e) => {
