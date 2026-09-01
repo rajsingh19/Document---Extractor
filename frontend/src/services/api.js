@@ -123,4 +123,10 @@ export const getInsights = async (params = {}) => {
   return response.data;
 };
 
+export const askCopilot = async (message) => {
+  const response = await api.post('/copilot/chat', { message });
+  return response.data;
+};
+
 export default api;
+

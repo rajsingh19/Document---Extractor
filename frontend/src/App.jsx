@@ -3,10 +3,11 @@ import Navbar from './components/Navbar';
 import Documents from './pages/Documents';
 import DocumentDetail from './pages/DocumentDetail';
 import Metrics from './pages/Metrics';
+import Copilot from './pages/Copilot';
 import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument } from './services/api';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('documents'); // 'documents' | 'metrics'
+  const [activeTab, setActiveTab] = useState('documents'); // 'documents' | 'metrics' | 'copilot'
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [health, setHealth] = useState(null);
   const [stats, setStats] = useState(null);
@@ -142,6 +143,10 @@ export default function App() {
             onBack={() => setSelectedDocument(null)}
             onDocumentUpdated={handleDocumentUpdated}
             onDocumentDeleted={handleDocumentDeleted}
+          />
+        ) : activeTab === 'copilot' ? (
+          <Copilot
+            onNavigate={handleNavTab}
           />
         ) : activeTab === 'metrics' ? (
           <Metrics

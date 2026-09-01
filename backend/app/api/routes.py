@@ -23,11 +23,14 @@ from backend.app.schemas.document import (
     ReviewStatusRequest,
     ClassificationUpdateRequest
 )
+from backend.app.schemas.copilot import CopilotRequest, CopilotResponse, CopilotContext
 from backend.app.services.extraction_service import ExtractionPipelineService
 from backend.app.services.ocr_service import OCRService
 from backend.app.services.llm_service import LLMService
 from backend.app.services.normalization_service import NormalizationService
 from backend.app.services.insights_service import insights_service
+from backend.app.services.copilot_service import copilot_service
+from backend.app.services.copilot_context import copilot_context_service
 from backend.app.utils.helpers import generate_unique_filename, parse_period_key
 from backend.app.utils.sample_generator import (
     generate_sample_electricity_bill,
@@ -955,3 +958,48 @@ def seed_sample_documents(
     force_ocr = (sample_type == "scanned")
     doc = pipeline_service.process_document(db, doc.id, force_ocr=force_ocr)
     return doc
+
+@router.post("/copilot/chat", response_model=CopilotResponse)
+def copilot_chat(
+    request: CopilotRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Senseible AI Copilot conversation endpoint (Step 11B grounded context).
+    Classifies intent, builds grounded context from database, and returns structured response contract.
+    """
+    try:
+        cleaned_msg = (request.message or "").strip()
+        if not cleaned_msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Message cannot be empty."
+            )
+        if len(cleaned_msg) > 2000:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Message exceeds maximum allowed length of 2000 characters."
+            )
+        
+        response = copilot_service.chat(db, cleaned_msg)
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Never expose internal exception details or stack traces
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while processing your request with Copilot. Please try again."
+        )
+
+@router.get("/copilot/context", response_model=CopilotContext)
+def get_copilot_context(
+    query: str = Query("What documents do I have?", description="User query for context retrieval"),
+    db: Session = Depends(get_db)
+):
+    """
+    Development/debug endpoint to inspect the structured grounded context generated
+    for a given query across documents, metrics, evidence, and deterministic insights.
+    """
+    return copilot_context_service.build_context(db, query)
+
