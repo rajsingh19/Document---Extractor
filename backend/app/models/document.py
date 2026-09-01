@@ -53,6 +53,9 @@ class Document(Base):
     # Error message if any step failed
     error_message = Column(Text, nullable=True)
     
+    # SHA-256 hash of original file for deterministic duplicate detection
+    file_hash = Column(String(64), nullable=True, index=True)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -63,6 +66,7 @@ class Document(Base):
             "filename": self.filename,
             "original_filename": self.original_filename,
             "file_size": self.file_size,
+            "file_hash": self.file_hash,
             "mime_type": self.mime_type,
             "page_count": self.page_count,
             "status": self.status,

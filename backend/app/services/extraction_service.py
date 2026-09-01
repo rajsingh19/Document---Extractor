@@ -118,6 +118,26 @@ class ExtractionPipelineService:
 
             doc.status = "COMPLETED"
             doc.error_message = None
+
+            # Detect possible business record duplicates (same company + type + period)
+            if doc.company_name and doc.document_type and doc.reporting_period:
+                existing_business_match = db.query(Document).filter(
+                    Document.company_name == doc.company_name,
+                    Document.document_type == doc.document_type,
+                    Document.reporting_period == doc.reporting_period,
+                    Document.id != doc.id,
+                    Document.status == "COMPLETED"
+                ).first()
+                if existing_business_match:
+                    if not doc.structured_data:
+                        doc.structured_data = {}
+                    doc.structured_data["possible_duplicate"] = True
+                    doc.structured_data["duplicate_document_id"] = existing_business_match.id
+                    doc.structured_data["duplicate_warning"] = (
+                        f"Possible duplicate: Document #{existing_business_match.id} ({existing_business_match.original_filename}) "
+                        f"already exists for {doc.company_name} ({doc.document_type}, {doc.reporting_period})."
+                    )
+
             db.commit()
             db.refresh(doc)
 

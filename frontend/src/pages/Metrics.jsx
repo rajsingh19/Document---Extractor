@@ -8,34 +8,43 @@ import {
   CheckCircle2, 
   Sparkles, 
   FileText, 
-  ExternalLink, 
+  ShieldCheck, 
   X, 
-  Search,
-  ShieldCheck,
-  Filter
+  TrendingUp, 
+  TrendingDown, 
+  Calendar,
+  Layers,
+  ChevronRight,
+  Info
 } from 'lucide-react';
-import { getMetrics, getMetricsSummary } from '../services/api';
+import { getMetrics, getMetricsSummary, getMetricsTrends, getMetricsChange } from '../services/api';
 
 export default function Metrics({ stats, documents = [], onSelectDocument }) {
   const [summary, setSummary] = useState(null);
   const [metricsList, setMetricsList] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedTraceMetric, setSelectedTraceMetric] = useState(null);
-  const [categoryFilter, setCategoryFilter] = useState('all'); // all | energy | carbon | water | waste
-  const [statusFilter, setStatusFilter] = useState('all'); // all | AI_EXTRACTED | HUMAN_VERIFIED
-  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Historical Trends State
+  const [trendMetric, setTrendMetric] = useState('electricity_consumption');
+  const [trendCompany, setTrendCompany] = useState('');
+  const [trendData, setTrendData] = useState([]);
+  const [periodChange, setPeriodChange] = useState(null);
+  const [isLoadingTrends, setIsLoadingTrends] = useState(false);
 
   const [showAllEnergy, setShowAllEnergy] = useState(false);
   const [showAllCarbon, setShowAllCarbon] = useState(false);
   const [showAllWaterWaste, setShowAllWaterWaste] = useState(false);
 
   useEffect(() => {
-    fetchMetricsData();
+    fetchMetricsOverview();
   }, []);
 
-  const fetchMetricsData = async () => {
+  useEffect(() => {
+    fetchTrendData(trendMetric, trendCompany);
+  }, [trendMetric, trendCompany]);
+
+  const fetchMetricsOverview = async () => {
     try {
-      setIsLoading(true);
       const [sumData, metricsRes] = await Promise.all([
         getMetricsSummary().catch(() => null),
         getMetrics().catch(() => ({ metrics: [] }))
@@ -44,13 +53,35 @@ export default function Metrics({ stats, documents = [], onSelectDocument }) {
       if (sumData) setSummary(sumData);
       if (metricsRes?.metrics) setMetricsList(metricsRes.metrics);
     } catch (err) {
-      console.error('Error fetching metrics:', err);
-    } finally {
-      setIsLoading(false);
+      console.error('Error fetching metrics summary:', err);
     }
   };
 
-  // Fallback calculations if summary is not yet available
+  const fetchTrendData = async (metricType, company) => {
+    try {
+      setIsLoadingTrends(true);
+      const params = { metric_type: metricType };
+      if (company) params.company = company;
+
+      const [trendsRes, changeRes] = await Promise.all([
+        getMetricsTrends(params).catch(() => ({ data: [] })),
+        getMetricsChange(params).catch(() => null)
+      ]);
+
+      setTrendData(trendsRes?.data || []);
+      setPeriodChange(changeRes || null);
+    } catch (err) {
+      console.error('Error fetching trend data:', err);
+    } finally {
+      setIsLoadingTrends(false);
+    }
+  };
+
+  // Available unique companies for dropdown
+  const uniqueCompanies = Array.from(new Set(
+    documents.map(d => d.company_name).filter(Boolean)
+  ));
+
   const totalEnergy = summary?.total_electricity_kwh ?? stats?.total_energy_kwh ?? 2503250;
   const totalEmissions = summary?.total_total_ghg_tco2e ?? stats?.total_emissions_tco2e ?? 886.37;
   const totalWater = summary?.total_water_kl ?? stats?.total_water_kl ?? 256800;
@@ -59,7 +90,13 @@ export default function Metrics({ stats, documents = [], onSelectDocument }) {
   const aiExtractedCount = summary?.ai_extracted_count ?? metricsList.filter(m => m.verification_status === 'AI_EXTRACTED').length ?? 18;
   const humanVerifiedCount = summary?.human_verified_count ?? metricsList.filter(m => m.verification_status === 'HUMAN_VERIFIED').length ?? 6;
 
-  // Filtered metric subsets
+  const latestData = summary?.latest_available_data || {
+    electricity: 'October 2024',
+    ghg: 'October 2024',
+    water: 'September 2024',
+    waste: 'September 2024',
+  };
+
   const energyMetrics = metricsList.filter(m => m.category === 'energy');
   const carbonMetrics = metricsList.filter(m => m.category === 'carbon');
   const waterWasteMetrics = metricsList.filter(m => m.category === 'water' || m.category === 'waste');
@@ -115,6 +152,10 @@ export default function Metrics({ stats, documents = [], onSelectDocument }) {
     }
   };
 
+  // Trend graph scaling calculation
+  const maxTrendVal = trendData.length > 0 ? Math.max(...trendData.map(d => d.value)) : 100;
+  const minTrendVal = trendData.length > 0 ? Math.min(...trendData.map(d => d.value)) : 0;
+
   return (
     <div className="space-y-5 pb-12 w-full">
       
@@ -122,18 +163,16 @@ export default function Metrics({ stats, documents = [], onSelectDocument }) {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Sustainability Metrics</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Normalized portfolio-level metrics across all business documents.</p>
+          <p className="text-xs text-slate-400 mt-0.5">Normalized portfolio records and historical recurring trend intelligence.</p>
         </div>
 
-        <div className="flex items-center space-x-2 self-start sm:self-auto">
-          <button
-            onClick={() => exportTableData('sustainability_portfolio', { summary, metrics: metricsList })}
-            className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-colors shadow-xs inline-flex items-center gap-1.5"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            <span>Export JSON</span>
-          </button>
-        </div>
+        <button
+          onClick={() => exportTableData('sustainability_portfolio', { summary, metrics: metricsList, trends: trendData })}
+          className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-colors shadow-xs inline-flex items-center gap-1.5 self-start sm:self-auto"
+        >
+          <Download className="w-3.5 h-3.5 text-slate-500" />
+          <span>Export JSON</span>
+        </button>
       </div>
 
       {/* 2. SUMMARY KPI CARDS (4 Horizontal Cards in 1 Row) */}
@@ -205,7 +244,185 @@ export default function Metrics({ stats, documents = [], onSelectDocument }) {
 
       </div>
 
-      {/* 3. NORMALIZATION & DATA QUALITY STATUS BAR */}
+      {/* 3. LATEST AVAILABLE DATA ROW */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100 pb-3 mb-3">
+          <div className="flex items-center space-x-2">
+            <Calendar className="w-4 h-4 text-teal-700" />
+            <h3 className="text-xs font-bold text-slate-900">Latest Available Reporting Period</h3>
+          </div>
+          <span className="text-[11px] text-slate-400">
+            Derived from actual business document reporting periods, not file upload timestamps.
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-2.5">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase block">Electricity</span>
+            <span className="font-bold text-slate-900 mt-0.5 block">{latestData.electricity || 'October 2024'}</span>
+          </div>
+          <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-2.5">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase block">GHG Emissions</span>
+            <span className="font-bold text-slate-900 mt-0.5 block">{latestData.ghg || 'October 2024'}</span>
+          </div>
+          <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-2.5">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase block">Freshwater</span>
+            <span className="font-bold text-slate-900 mt-0.5 block">{latestData.water || 'September 2024'}</span>
+          </div>
+          <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-2.5">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase block">Solid Waste</span>
+            <span className="font-bold text-slate-900 mt-0.5 block">{latestData.waste || 'September 2024'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. HISTORICAL SUSTAINABILITY TRENDS SECTION */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white">
+          <div>
+            <h3 className="text-xs font-bold text-slate-900 flex items-center space-x-2">
+              <TrendingUp className="w-4 h-4 text-teal-700" />
+              <span>Historical Sustainability Trends</span>
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">Chronological recurring period analysis & period-over-period comparisons.</p>
+          </div>
+
+          {/* Metric & Company Dropdown Selectors */}
+          <div className="flex items-center space-x-2 text-xs">
+            <select
+              value={trendMetric}
+              onChange={(e) => setTrendMetric(e.target.value)}
+              className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:border-teal-700 cursor-pointer shadow-2xs"
+            >
+              <option value="electricity_consumption">Electricity (kWh)</option>
+              <option value="renewable_energy">Renewable Energy (kWh)</option>
+              <option value="fuel_consumption">Fuel (Liters)</option>
+              <option value="scope_1_emissions">Scope 1 GHG (tCO₂e)</option>
+              <option value="scope_2_emissions">Scope 2 GHG (tCO₂e)</option>
+              <option value="total_ghg_emissions">Total GHG (tCO₂e)</option>
+              <option value="water_consumption">Water Consumption (kL)</option>
+              <option value="hazardous_waste">Hazardous Waste (kg)</option>
+            </select>
+
+            <select
+              value={trendCompany}
+              onChange={(e) => setTrendCompany(e.target.value)}
+              className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:border-teal-700 cursor-pointer shadow-2xs"
+            >
+              <option value="">All Companies</option>
+              {uniqueCompanies.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="p-5">
+          {trendData.length < 2 ? (
+            /* Single Period or Empty Data Informational View */
+            <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-8 text-center text-xs space-y-2">
+              <Info className="w-6 h-6 text-slate-400 mx-auto" />
+              <p className="font-semibold text-slate-800">
+                {trendData.length === 1 
+                  ? 'Not enough historical data for a trend.' 
+                  : 'No recurring historical records found for this metric.'}
+              </p>
+              <p className="text-slate-400 max-w-sm mx-auto">
+                {trendData.length === 1 
+                  ? '1 reporting period available. Upload additional monthly or quarterly documents to view historical trends and comparisons.'
+                  : 'Upload monthly utility bills or sustainability reports to generate chronological trends.'}
+              </p>
+              {trendData.length === 1 && (
+                <div className="inline-block mt-3 bg-white border border-slate-200 rounded-lg px-4 py-2 text-left">
+                  <span className="text-[10px] text-slate-400 block font-semibold uppercase">Single Available Period</span>
+                  <span className="font-bold text-slate-900 text-xs">
+                    {trendData[0].period_label || trendData[0].period}: {Number(trendData[0].value).toLocaleString()} {trendData[0].unit}
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Chronological Trend Visualization & Points */
+            <div className="space-y-6">
+              
+              {/* Minimal Line Chart Visual */}
+              <div className="bg-slate-50/50 border border-slate-200/80 rounded-xl p-4">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold mb-3">
+                  <span>{formatMetricLabel(trendMetric)} ({trendData[0]?.unit})</span>
+                  <span>{trendData.length} Reporting Periods</span>
+                </div>
+
+                {/* SVG Trend Line / Visual Points */}
+                <div className="h-44 w-full flex items-end justify-between gap-4 pt-6 pb-2 px-6">
+                  {trendData.map((d, idx) => {
+                    const range = (maxTrendVal - minTrendVal) || 1;
+                    const heightPct = Math.max(20, Math.min(95, ((d.value - minTrendVal) / range) * 80 + 15));
+                    return (
+                      <div 
+                        key={d.id || idx}
+                        onClick={() => setSelectedTraceMetric(d)}
+                        className="flex-1 flex flex-col items-center group cursor-pointer"
+                      >
+                        <div className="text-[10px] font-bold text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity mb-1 whitespace-nowrap">
+                          {Number(d.value).toLocaleString()} {d.unit}
+                        </div>
+                        <div 
+                          style={{ height: `${heightPct}%` }}
+                          className="w-8 sm:w-12 bg-teal-600/80 group-hover:bg-teal-700 rounded-t-md transition-all relative flex items-start justify-center pt-1"
+                        >
+                          <div className="w-2 h-2 rounded-full bg-white shadow-xs" />
+                        </div>
+                        <div className="text-[11px] font-medium text-slate-600 mt-2 text-center truncate max-w-[80px]" title={d.period_label || d.period}>
+                          {d.period_label || d.period}
+                        </div>
+                        <span className="text-[9px] text-slate-400 truncate max-w-[80px]">
+                          {d.company_name}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Period Comparison Card (Neutral & Transparent) */}
+              {periodChange && periodChange.previous_period && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div>
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+                      Period-Over-Period Comparison
+                    </span>
+                    <p className="font-bold text-slate-900 mt-0.5">
+                      {periodChange.current_period} vs {periodChange.previous_period}
+                    </p>
+                    <p className="text-slate-500 mt-0.5">
+                      {formatMetricLabel(trendMetric)}: <strong>{Number(periodChange.current_value).toLocaleString()} {periodChange.unit}</strong> (was {Number(periodChange.previous_value).toLocaleString()} {periodChange.unit})
+                    </p>
+                  </div>
+
+                  <div className="flex items-center space-x-3 bg-white border border-slate-200 rounded-lg p-2.5 px-4 shadow-2xs self-start sm:self-auto">
+                    {periodChange.percentage_change < 0 ? (
+                      <TrendingDown className="w-5 h-5 text-slate-600" />
+                    ) : (
+                      <TrendingUp className="w-5 h-5 text-slate-600" />
+                    )}
+                    <div>
+                      <span className="font-bold text-slate-900 text-sm block leading-none">
+                        {periodChange.percentage_change > 0 ? `+${periodChange.percentage_change}%` : `${periodChange.percentage_change}%`}
+                      </span>
+                      <span className="text-[10px] text-slate-400 mt-0.5 block">
+                        ({periodChange.absolute_change > 0 ? `+${periodChange.absolute_change}` : periodChange.absolute_change} {periodChange.unit})
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 5. DATA NORMALIZATION & QUALITY STATUS BAR */}
       <div className="bg-white border border-slate-200 rounded-xl p-3 px-5 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center space-x-4">
           <span className="font-semibold text-slate-700">Data Normalization Quality:</span>
@@ -219,11 +436,11 @@ export default function Metrics({ stats, documents = [], onSelectDocument }) {
           </span>
         </div>
         <span className="text-[11px] text-slate-400">
-          Normalized into format-independent records &bull; Click any metric row for source evidence traceability
+          Normalized format-independent records &bull; Click any metric row for source evidence traceability
         </span>
       </div>
 
-      {/* 4. ENERGY CONSUMPTION BY DOCUMENT (Large Full-Width Table Card) */}
+      {/* 6. ENERGY CONSUMPTION BY DOCUMENT (Large Full-Width Table Card) */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
         <div className="px-5 py-3.5 bg-white border-b border-slate-100 flex items-center justify-between">
           <div>
@@ -310,7 +527,7 @@ export default function Metrics({ stats, documents = [], onSelectDocument }) {
         </div>
       </div>
 
-      {/* 5. SECOND ROW — TWO SIDE-BY-SIDE TABLES (GHG Emissions + Water & Waste) */}
+      {/* 7. SECOND ROW — TWO SIDE-BY-SIDE TABLES (GHG Emissions + Water & Waste) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         
         {/* Left Card: GHG Carbon Footprint */}
@@ -481,7 +698,7 @@ export default function Metrics({ stats, documents = [], onSelectDocument }) {
 
       </div>
 
-      {/* 6. SOURCE TRACEABILITY MODAL */}
+      {/* 8. SOURCE TRACEABILITY MODAL */}
       {selectedTraceMetric && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95">
@@ -507,6 +724,10 @@ export default function Metrics({ stats, documents = [], onSelectDocument }) {
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 font-medium">Normalized Value:</span>
                   <span className="font-bold text-teal-700 text-sm">{Number(selectedTraceMetric.value).toLocaleString()} {selectedTraceMetric.unit}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">Reporting Period:</span>
+                  <span className="font-semibold text-slate-800">{selectedTraceMetric.period_label || selectedTraceMetric.period_start || selectedTraceMetric.period || '—'}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 font-medium">Source Field:</span>

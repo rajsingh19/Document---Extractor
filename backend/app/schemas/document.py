@@ -29,6 +29,7 @@ class DocumentResponse(DocumentBase):
     extracted_text: Optional[str] = None
     structured_data: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
+    file_hash: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

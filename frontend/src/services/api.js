@@ -95,6 +95,16 @@ export const getMetricsSummary = async () => {
   return response.data;
 };
 
+export const getMetricsTrends = async (params = {}) => {
+  const response = await api.get('/metrics/trends', { params });
+  return response.data;
+};
+
+export const getMetricsChange = async (params = {}) => {
+  const response = await api.get('/metrics/change', { params });
+  return response.data;
+};
+
 export const normalizeDocument = async (documentId) => {
   const response = await api.post(`/documents/${documentId}/normalize`);
   return response.data;

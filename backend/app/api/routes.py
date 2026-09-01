@@ -1,6 +1,7 @@
 import os
 import shutil
 import json
+import hashlib
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
@@ -25,7 +26,7 @@ from backend.app.services.extraction_service import ExtractionPipelineService
 from backend.app.services.ocr_service import OCRService
 from backend.app.services.llm_service import LLMService
 from backend.app.services.normalization_service import NormalizationService
-from backend.app.utils.helpers import generate_unique_filename
+from backend.app.utils.helpers import generate_unique_filename, parse_period_key
 from backend.app.utils.sample_generator import (
     generate_sample_electricity_bill,
     generate_sample_esg_audit_report,
@@ -53,7 +54,7 @@ def health_check():
         "ocr_available": OCRService.is_ocr_available()
     }
 
-@router.post("/documents/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/documents/upload", status_code=status.HTTP_201_CREATED)
 async def upload_document(
     file: UploadFile = File(...),
     auto_process: bool = Query(True, description="Automatically trigger extraction pipeline"),
@@ -61,7 +62,8 @@ async def upload_document(
     db: Session = Depends(get_db)
 ):
     """
-    Upload a PDF sustainability document and execute the AI extraction pipeline.
+    Upload a PDF sustainability document, check for deterministic SHA-256 duplicate,
+    and execute the AI extraction pipeline.
     """
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(
@@ -69,13 +71,33 @@ async def upload_document(
             detail="Only PDF documents are supported (.pdf)"
         )
 
+    file_bytes = await file.read()
+    file_size = len(file_bytes)
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
+
+    # Deterministic duplicate detection: check if exact file was already uploaded
+    existing_doc = db.query(Document).filter(
+        Document.file_hash == file_hash,
+        Document.status == "COMPLETED"
+    ).first()
+
+    if existing_doc:
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "duplicate": True,
+                "existing_document_id": existing_doc.id,
+                "message": "This document has already been processed.",
+                **existing_doc.to_dict()
+            }
+        )
+
     unique_filename = generate_unique_filename(file.filename)
     file_path = os.path.join(UPLOAD_DIR, unique_filename)
 
     try:
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        file_size = os.path.getsize(file_path)
+            buffer.write(file_bytes)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -87,6 +109,7 @@ async def upload_document(
         original_filename=file.filename,
         file_path=file_path,
         file_size=file_size,
+        file_hash=file_hash,
         mime_type="application/pdf",
         status="PENDING",
         review_status="NEEDS_REVIEW"
@@ -487,6 +510,21 @@ def get_portfolio_metrics_summary(db: Session = Depends(get_db)):
     human_verified_count = sum(1 for m in metrics if m.verification_status == "HUMAN_VERIFIED")
     docs_with_metrics = len(set(m.document_id for m in metrics))
 
+    # Calculate actual latest available reporting period for each category (never using upload date)
+    def get_latest_period(category_types):
+        recs = [m for m in metrics if m.metric_type in category_types and (m.period_start or m.period_end)]
+        if not recs:
+            return None
+        sorted_recs = sorted(recs, key=lambda r: parse_period_key(r.period_start or r.period_end), reverse=True)
+        return sorted_recs[0].period_start or sorted_recs[0].period_end
+
+    latest_available_data = {
+        "electricity": get_latest_period(["electricity_consumption", "renewable_energy"]),
+        "ghg": get_latest_period(["scope_1_emissions", "scope_2_emissions", "total_ghg_emissions"]),
+        "water": get_latest_period(["water_consumption", "recycled_water"]),
+        "waste": get_latest_period(["hazardous_waste", "non_hazardous_waste", "recycled_waste"]),
+    }
+
     return {
         "total_electricity_kwh": round(total_electricity_kwh, 2),
         "total_renewable_energy_kwh": round(total_renewable_energy_kwh, 2),
@@ -502,7 +540,135 @@ def get_portfolio_metrics_summary(db: Session = Depends(get_db)):
         "ai_extracted_count": ai_extracted_count,
         "human_verified_count": human_verified_count,
         "total_metrics_count": len(metrics),
-        "documents_with_metrics_count": docs_with_metrics
+        "documents_with_metrics_count": docs_with_metrics,
+        "latest_available_data": latest_available_data
+    }
+
+@router.get("/metrics/trends")
+def get_metrics_trends(
+    metric_type: str = Query("electricity_consumption", description="Metric type to query trends for"),
+    company: Optional[str] = Query(None, description="Filter by company name"),
+    start_date: Optional[str] = Query(None, description="Filter by period start"),
+    end_date: Optional[str] = Query(None, description="Filter by period end"),
+    db: Session = Depends(get_db)
+):
+    """
+    Return chronological sustainability metric history for trend analysis.
+    Sorted chronologically by reporting period. Never fabricates missing periods.
+    """
+    query = db.query(SustainabilityMetric).filter(SustainabilityMetric.metric_type == metric_type)
+    if company:
+        query = query.filter(SustainabilityMetric.company_name.ilike(f"%{company}%"))
+    if start_date:
+        query = query.filter(SustainabilityMetric.period_start >= start_date)
+    if end_date:
+        query = query.filter(SustainabilityMetric.period_end <= end_date)
+
+    records = query.all()
+    if not records:
+        return {
+            "company_name": company or "All Companies",
+            "metric_type": metric_type,
+            "unit": "kWh",
+            "data": []
+        }
+
+    unit = records[0].unit
+
+    # Sort chronologically by standard period key
+    def sort_key(m):
+        p = m.period_start or m.period_end or "9999-99"
+        return (parse_period_key(p), m.created_at or datetime.min)
+
+    sorted_records = sorted(records, key=sort_key)
+
+    data_points = []
+    for m in sorted_records:
+        period_raw = m.period_start or m.period_end or "Unknown"
+        data_points.append({
+            "id": m.id,
+            "document_id": m.document_id,
+            "company_name": m.company_name,
+            "period": parse_period_key(period_raw),
+            "period_label": period_raw,
+            "period_start": m.period_start,
+            "period_end": m.period_end,
+            "value": m.value,
+            "unit": m.unit,
+            "source_field": m.source_field,
+            "source_text": m.source_text,
+            "confidence": m.confidence,
+            "verification_status": m.verification_status,
+            "created_at": m.created_at.isoformat() if m.created_at else None
+        })
+
+    return {
+        "company_name": company or (records[0].company_name if records else "All Companies"),
+        "metric_type": metric_type,
+        "unit": unit,
+        "data": data_points
+    }
+
+@router.get("/metrics/change")
+def get_metrics_change(
+    metric_type: str = Query("electricity_consumption", description="Metric type to compare"),
+    company: Optional[str] = Query(None, description="Filter by company name"),
+    db: Session = Depends(get_db)
+):
+    """
+    Period-over-period comparison between the latest two reporting periods.
+    """
+    query = db.query(SustainabilityMetric).filter(SustainabilityMetric.metric_type == metric_type)
+    if company:
+        query = query.filter(SustainabilityMetric.company_name.ilike(f"%{company}%"))
+
+    records = query.all()
+    if not records:
+        return {
+            "metric_type": metric_type,
+            "unit": "kWh",
+            "current_period": None,
+            "current_value": None,
+            "previous_period": None,
+            "previous_value": None,
+            "absolute_change": None,
+            "percentage_change": None
+        }
+
+    def sort_key(m):
+        p = m.period_start or m.period_end or "9999-99"
+        return (parse_period_key(p), m.created_at or datetime.min)
+
+    sorted_records = sorted(records, key=sort_key)
+
+    if len(sorted_records) < 2:
+        latest = sorted_records[0]
+        return {
+            "metric_type": metric_type,
+            "unit": latest.unit,
+            "current_period": parse_period_key(latest.period_start or latest.period_end or "Unknown"),
+            "current_value": latest.value,
+            "previous_period": None,
+            "previous_value": None,
+            "absolute_change": None,
+            "percentage_change": None
+        }
+
+    curr = sorted_records[-1]
+    prev = sorted_records[-2]
+
+    abs_change = round(curr.value - prev.value, 2)
+    pct_change = round(((curr.value - prev.value) / prev.value) * 100, 2) if prev.value != 0 else 0.0
+
+    return {
+        "metric_type": metric_type,
+        "unit": curr.unit,
+        "current_period": parse_period_key(curr.period_start or curr.period_end or "Unknown"),
+        "current_value": curr.value,
+        "previous_period": parse_period_key(prev.period_start or prev.period_end or "Unknown"),
+        "previous_value": prev.value,
+        "absolute_change": abs_change,
+        "percentage_change": pct_change
     }
 
 @router.get("/documents/{document_id}/audit-trail")

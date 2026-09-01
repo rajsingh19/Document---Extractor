@@ -132,6 +132,7 @@ export default function DocumentTable({
             <tr>
               <th className="px-6 py-3.5">DOCUMENT</th>
               <th className="px-4 py-3.5">TYPE</th>
+              <th className="px-4 py-3.5">PERIOD</th>
               <th className="px-4 py-3.5">STATUS</th>
               <th className="px-4 py-3.5">QUALITY</th>
               <th className="px-4 py-3.5">UPLOADED</th>
@@ -142,6 +143,7 @@ export default function DocumentTable({
             {documents.map((doc, idx) => {
               const quality = doc.quality_score != null ? Math.round(doc.quality_score) : 0;
               const isMenuOpen = activeMenuId === doc.id;
+              const isPossibleDuplicate = doc.structured_data?.possible_duplicate;
 
               return (
                 <tr
@@ -154,9 +156,19 @@ export default function DocumentTable({
                     <div className="flex items-center space-x-3">
                       {getFileBadge(doc.original_filename, doc.document_type, idx)}
                       <div>
-                        <span className="font-semibold text-slate-900 hover:text-teal-700 text-xs block leading-tight">
-                          {doc.company_name || doc.original_filename}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-semibold text-slate-900 hover:text-teal-700 text-xs block leading-tight">
+                            {doc.company_name || doc.original_filename}
+                          </span>
+                          {isPossibleDuplicate && (
+                            <span 
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-100 text-amber-800 border border-amber-300"
+                              title={doc.structured_data?.duplicate_warning || 'Possible duplicate business record'}
+                            >
+                              Possible duplicate
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[11px] text-slate-400 mt-1">
                           {doc.original_filename} &bull; {(doc.file_size / 1024).toFixed(1)} KB
                         </p>
@@ -169,9 +181,13 @@ export default function DocumentTable({
                     <span className="font-medium text-slate-800 text-xs block leading-tight">
                       {doc.document_type || 'Unclassified'}
                     </span>
-                    <p className="text-[11px] text-slate-400 mt-1">
+                  </td>
+
+                  {/* PERIOD */}
+                  <td className="px-4 py-3.5">
+                    <span className="text-xs text-slate-600 font-medium">
                       {doc.reporting_period || '—'}
-                    </p>
+                    </span>
                   </td>
 
                   {/* STATUS */}
@@ -194,7 +210,7 @@ export default function DocumentTable({
                   </td>
 
                   {/* UPLOADED */}
-                  <td className="px-4 py-3.5 text-xs text-slate-500">
+                  <td className="px-4 py-3.5 text-xs text-slate-500 whitespace-nowrap">
                     {formatDate(doc.created_at)}
                   </td>
 
