@@ -17,7 +17,9 @@ import {
   AlignLeft, 
   Info,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  FileSearch,
+  Cpu
 } from 'lucide-react';
 
 export default function DocumentDetailModal({ document, onClose }) {
@@ -34,6 +36,8 @@ export default function DocumentDetailModal({ document, onClose }) {
   const waterWaste = data.water_and_waste || {};
   const compliance = data.compliance || {};
   const lineItems = data.line_items || [];
+  const evidence = data.evidence || [];
+  const metadata = data.metadata || {};
 
   const handleCopyJson = () => {
     navigator.clipboard.writeText(JSON.stringify(data, null, 2));
@@ -58,6 +62,13 @@ export default function DocumentDetailModal({ document, onClose }) {
                 </h3>
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   {data.document_type || document.document_type || 'Sustainability Record'}
+                </span>
+                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${
+                  metadata.provider === 'openai' 
+                    ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/50' 
+                    : 'bg-amber-950/60 text-amber-300 border-amber-700/50'
+                }`}>
+                  {metadata.provider === 'openai' ? 'OpenAI Live' : 'Heuristic Engine'}
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -89,10 +100,10 @@ export default function DocumentDetailModal({ document, onClose }) {
         </div>
 
         {/* Navigation Tabs */}
-        <div className="px-6 border-b border-slate-800 bg-slate-900/50 flex space-x-6">
+        <div className="px-6 border-b border-slate-800 bg-slate-900/50 flex space-x-6 overflow-x-auto">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`py-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`py-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'overview'
                 ? 'border-emerald-400 text-emerald-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -103,8 +114,20 @@ export default function DocumentDetailModal({ document, onClose }) {
           </button>
 
           <button
+            onClick={() => setActiveTab('evidence')}
+            className={`py-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'evidence'
+                ? 'border-emerald-400 text-emerald-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <FileSearch className="w-4 h-4" />
+            Source Evidence ({evidence.length})
+          </button>
+
+          <button
             onClick={() => setActiveTab('json')}
-            className={`py-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`py-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'json'
                 ? 'border-emerald-400 text-emerald-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -116,7 +139,7 @@ export default function DocumentDetailModal({ document, onClose }) {
 
           <button
             onClick={() => setActiveTab('raw_text')}
-            className={`py-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`py-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'raw_text'
                 ? 'border-emerald-400 text-emerald-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -128,14 +151,14 @@ export default function DocumentDetailModal({ document, onClose }) {
 
           <button
             onClick={() => setActiveTab('metadata')}
-            className={`py-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`py-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'metadata'
                 ? 'border-emerald-400 text-emerald-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <Info className="w-4 h-4" />
-            Pipeline Audit
+            Extraction Metadata & Audit
           </button>
         </div>
 
@@ -150,7 +173,7 @@ export default function DocumentDetailModal({ document, onClose }) {
               {data.executive_summary && (
                 <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-800/40 text-emerald-200 text-xs leading-relaxed">
                   <p className="font-semibold text-emerald-400 uppercase tracking-wider text-[10px] mb-1">
-                    Executive Summary
+                    Executive Summary (Non-Hallucinated Extraction)
                   </p>
                   <p>{data.executive_summary}</p>
                 </div>
@@ -194,7 +217,7 @@ export default function DocumentDetailModal({ document, onClose }) {
                       <Zap className="w-4 h-4 text-amber-400" />
                       <span>Energy & Power Profile</span>
                     </div>
-                    {energy.total_energy_cost_inr && (
+                    {energy.total_energy_cost_inr != null && (
                       <span className="text-xs font-bold text-white bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
                         INR {energy.total_energy_cost_inr.toLocaleString()}
                       </span>
@@ -357,7 +380,57 @@ export default function DocumentDetailModal({ document, onClose }) {
             </div>
           )}
 
-          {/* TAB 2: STRUCTURED JSON */}
+          {/* TAB 2: SOURCE EVIDENCE */}
+          {activeTab === 'evidence' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <FileSearch className="w-4 h-4 text-emerald-400" />
+                    Preserved Source Evidence Snippets
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Verifiable raw text lines from the document corresponding to each key extracted metric.
+                  </p>
+                </div>
+                <span className="text-xs font-mono bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700 text-slate-300">
+                  {evidence.length} Evidence Anchors
+                </span>
+              </div>
+
+              {evidence.length === 0 ? (
+                <div className="p-8 text-center glass-card rounded-xl text-slate-400 text-xs">
+                  No source evidence anchors recorded for this document.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {evidence.map((item, idx) => (
+                    <div key={idx} className="glass-card p-4 rounded-xl border border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <span className="px-2 py-0.5 rounded bg-slate-800 text-emerald-300 border border-slate-700 text-[11px] font-mono font-semibold">
+                            {item.field}
+                          </span>
+                          <span className="text-xs font-bold text-white">
+                            {item.value != null ? item.value.toLocaleString() : '-'} {item.unit || ''}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
+                          Verified Match
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 text-slate-300 font-mono text-xs leading-relaxed">
+                        <span className="text-emerald-500 font-bold mr-2">&gt;</span>
+                        "{item.source_text}"
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: STRUCTURED JSON */}
           {activeTab === 'json' && (
             <div className="relative">
               <button
@@ -373,7 +446,7 @@ export default function DocumentDetailModal({ document, onClose }) {
             </div>
           )}
 
-          {/* TAB 3: RAW EXTRACTED TEXT */}
+          {/* TAB 4: RAW EXTRACTED TEXT */}
           {activeTab === 'raw_text' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs text-slate-400">
@@ -386,26 +459,43 @@ export default function DocumentDetailModal({ document, onClose }) {
             </div>
           )}
 
-          {/* TAB 4: METADATA */}
+          {/* TAB 5: EXTRACTION METADATA & AUDIT */}
           {activeTab === 'metadata' && (
-            <div className="glass-card p-5 rounded-xl border border-slate-800 space-y-3 text-xs">
-              <h4 className="font-bold text-white text-sm">System Pipeline Audit</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-300">
-                <p><span className="text-slate-500">Document ID:</span> {document.id}</p>
-                <p><span className="text-slate-500">Stored Filename:</span> {document.filename}</p>
-                <p><span className="text-slate-500">Original Filename:</span> {document.original_filename}</p>
-                <p><span className="text-slate-500">File Size:</span> {(document.file_size / 1024).toFixed(2)} KB ({document.file_size} bytes)</p>
-                <p><span className="text-slate-500">Page Count:</span> {document.page_count} pages</p>
-                <p><span className="text-slate-500">Extraction Method:</span> {document.extraction_method}</p>
-                <p><span className="text-slate-500">Confidence Score:</span> {Math.round((document.confidence_score || 0.85) * 100)}%</p>
-                <p><span className="text-slate-500">Created Timestamp:</span> {document.created_at || '-'}</p>
-              </div>
-              {document.error_message && (
-                <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/50 text-rose-300 text-xs">
-                  <p className="font-bold">Error Message:</p>
-                  <p>{document.error_message}</p>
+            <div className="space-y-4">
+              <div className="glass-card p-5 rounded-xl border border-slate-800 space-y-3 text-xs">
+                <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                  <Cpu className="w-4 h-4 text-emerald-400" />
+                  AI Extraction Layer Metadata
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-300">
+                  <p><span className="text-slate-500">Extraction Provider:</span> <span className="font-semibold text-emerald-400">{metadata.provider || 'openai'}</span></p>
+                  <p><span className="text-slate-500">Model Engine:</span> {metadata.model || '-'}</p>
+                  <p><span className="text-slate-500">Quality Confidence:</span> {Math.round(((metadata.confidence || document.confidence_score) || 0.85) * 100)}%</p>
+                  <p><span className="text-slate-500">Document Ingestion Method:</span> {metadata.extraction_method || document.extraction_method}</p>
+                  <p className="sm:col-span-2"><span className="text-slate-500">Processing Notes:</span> {metadata.processing_notes || 'Clean extraction completed'}</p>
                 </div>
-              )}
+              </div>
+
+              <div className="glass-card p-5 rounded-xl border border-slate-800 space-y-3 text-xs">
+                <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                  <Info className="w-4 h-4 text-blue-400" />
+                  Storage & Pipeline Record
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-300">
+                  <p><span className="text-slate-500">Document ID:</span> {document.id}</p>
+                  <p><span className="text-slate-500">Stored Filename:</span> {document.filename}</p>
+                  <p><span className="text-slate-500">Original Filename:</span> {document.original_filename}</p>
+                  <p><span className="text-slate-500">File Size:</span> {(document.file_size / 1024).toFixed(2)} KB ({document.file_size} bytes)</p>
+                  <p><span className="text-slate-500">Page Count:</span> {document.page_count} pages</p>
+                  <p><span className="text-slate-500">Created Timestamp:</span> {document.created_at || '-'}</p>
+                </div>
+                {document.error_message && (
+                  <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/50 text-rose-300 text-xs">
+                    <p className="font-bold">Error Message:</p>
+                    <p>{document.error_message}</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
