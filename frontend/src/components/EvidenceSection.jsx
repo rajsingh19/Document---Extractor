@@ -1,78 +1,111 @@
-import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, FileSearch, CheckCircle2 } from 'lucide-react';
+import React from 'react';
+import { FileSearch } from 'lucide-react';
 
 export default function EvidenceSection({ evidence = [] }) {
-  const [isOpen, setIsOpen] = useState(true);
-
   if (!evidence || evidence.length === 0) {
-    return null;
+    return (
+      <div className="bg-white border border-slate-200 rounded-lg p-6 mb-6 shadow-2xs text-center text-xs text-slate-500">
+        No source evidence anchors recorded for this document.
+      </div>
+    );
   }
 
+  const formatConfidence = (confLevel, confScore) => {
+    const level = (confLevel || (confScore >= 0.9 ? 'High' : confScore >= 0.7 ? 'Medium' : 'Low')).toLowerCase();
+    if (level === 'high' || confScore >= 0.9) {
+      return {
+        label: 'High confidence',
+        hint: null,
+        badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      };
+    }
+    if (level === 'medium' || confScore >= 0.7) {
+      return {
+        label: 'Medium confidence',
+        hint: 'Review recommended.',
+        badgeClass: 'bg-amber-50 text-amber-700 border-amber-200'
+      };
+    }
+    return {
+      label: 'Low confidence',
+      hint: 'Please verify this value against the source document.',
+      badgeClass: 'bg-rose-50 text-rose-700 border-rose-200'
+    };
+  };
+
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden mb-6">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-5 py-3.5 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between text-left hover:bg-slate-100/50 transition-colors"
-      >
+    <div className="bg-white border border-slate-200 rounded-lg shadow-2xs overflow-hidden mb-6">
+      
+      {/* Header */}
+      <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <FileSearch className="w-4 h-4 text-teal-700" />
-          <h3 className="text-sm font-semibold text-slate-900">
-            Source Evidence Anchors ({evidence.length})
-          </h3>
+          <FileSearch className="w-4 h-4 text-[#0f6b56]" />
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">
+              Source Evidence ({evidence.length})
+            </h3>
+            <p className="text-[11px] text-slate-500">
+              Verifiable text excerpts showing where the extraction engine located each value.
+            </p>
+          </div>
         </div>
-        {isOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
-      </button>
+      </div>
 
-      {isOpen && (
-        <div className="p-5 space-y-3.5">
-          {evidence.map((item, idx) => {
-            const confLevel = item.confidence_level || (item.confidence >= 0.9 ? 'High' : item.confidence >= 0.7 ? 'Medium' : 'Low');
-            const confPercent = item.confidence ? Math.round(item.confidence * 100) : 90;
+      {/* Evidence List */}
+      <div className="divide-y divide-slate-100">
+        {evidence.map((item, idx) => {
+          const conf = formatConfidence(item.confidence_level, item.confidence);
+          const fieldName = item.field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          const displayValue = item.human_corrected_value != null ? item.human_corrected_value : item.value;
 
-            return (
-              <div key={idx} className="p-3.5 rounded-md border border-slate-200 bg-white space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className="font-semibold text-slate-900 text-sm">
-                      {item.field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+          return (
+            <div key={idx} className="p-4 space-y-2 text-xs hover:bg-slate-50/50 transition-colors">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <div className="flex items-center space-x-2">
+                  <span className="font-semibold text-slate-900 text-xs">
+                    {fieldName}
+                  </span>
+                  <span className="text-slate-400">&bull;</span>
+                  <span className="font-medium text-slate-800">
+                    {displayValue != null ? (
+                      typeof displayValue === 'number' ? displayValue.toLocaleString() : String(displayValue)
+                    ) : '—'} {item.unit || ''}
+                  </span>
+                  {item.human_corrected_value != null && (
+                    <span className="text-[10px] text-purple-700 font-medium bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200">
+                      Human Verified
                     </span>
-                    <span className="text-slate-600 font-medium">
-                      {item.human_corrected_value != null ? (
-                        <span>{item.human_corrected_value} {item.unit || ''} (Corrected)</span>
-                      ) : (
-                        <span>{item.value != null ? item.value.toLocaleString() : '—'} {item.unit || ''}</span>
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    {item.is_verified && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                        Verified
-                      </span>
-                    )}
-                    <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${
-                      confLevel === 'High' || confPercent >= 90
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : confLevel === 'Medium' || confPercent >= 70
-                        ? 'bg-amber-50 text-amber-700 border-amber-200'
-                        : 'bg-rose-50 text-rose-700 border-rose-200'
-                    }`}>
-                      Confidence: {confLevel} ({confPercent}%)
-                    </span>
-                  </div>
+                  )}
                 </div>
 
-                {item.source_text && (
-                  <div className="p-2.5 rounded bg-slate-50 border border-slate-200 text-slate-700 font-mono text-[11px] leading-relaxed">
-                    "{item.source_text}"
-                  </div>
-                )}
+                <div className="flex items-center space-x-2">
+                  <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${conf.badgeClass}`}>
+                    {conf.label}
+                  </span>
+                </div>
               </div>
-            );
-          })}
-        </div>
-      )}
+
+              {/* Source Text Snippet */}
+              {item.source_text ? (
+                <div className="p-2.5 rounded bg-slate-50 border border-slate-200 text-slate-700 font-mono text-[11px] leading-relaxed">
+                  <span className="text-slate-400 font-sans mr-1">Source:</span>
+                  "{item.source_text}"
+                </div>
+              ) : (
+                <p className="text-slate-400 italic text-[11px]">No exact source text excerpt.</p>
+              )}
+
+              {/* Explanatory hint for medium/low confidence */}
+              {conf.hint && (
+                <p className="text-[11px] text-amber-700 font-medium">
+                  {conf.hint}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
     </div>
   );
 }

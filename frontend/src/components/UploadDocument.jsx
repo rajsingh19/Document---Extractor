@@ -12,11 +12,11 @@ export default function UploadDocument({ onUploadSuccess, onCancel }) {
   const fileInputRef = useRef(null);
 
   const steps = [
-    'Document uploaded',
-    'Identifying document type & routing expected fields...',
-    'Reading document and extracting data...',
-    'Checking extracted data and evidence...',
-    'Ready for review'
+    'Reading document',
+    'Identifying document type',
+    'Extracting information',
+    'Validating extracted values',
+    'Preparing sustainability metrics'
   ];
 
   const handleDragOver = (e) => {
@@ -45,11 +45,15 @@ export default function UploadDocument({ onUploadSuccess, onCancel }) {
   const validateAndSetFile = (selectedFile) => {
     setErrorMessage(null);
     if (!selectedFile.name.toLowerCase().endsWith('.pdf')) {
-      setErrorMessage('Please upload a PDF document (.pdf).');
+      setErrorMessage('Please upload a PDF file.');
       return;
     }
-    if (selectedFile.size > 10 * 1024 * 1024) {
-      setErrorMessage('File size exceeds 10 MB limit.');
+    if (selectedFile.size > 25 * 1024 * 1024) {
+      setErrorMessage('File is too large (maximum 25 MB).');
+      return;
+    }
+    if (selectedFile.size === 0) {
+      setErrorMessage('The selected file is empty.');
       return;
     }
     setFile(selectedFile);
@@ -62,35 +66,37 @@ export default function UploadDocument({ onUploadSuccess, onCancel }) {
     setErrorMessage(null);
     setProcessStep(0);
 
-    // Simulate clean sequential step indicators for user feedback
+    // Step simulation for realistic progress feedback
     const stepInterval = setInterval(() => {
-      setProcessStep((prev) => (prev < 3 ? prev + 1 : prev));
-    }, 900);
+      setProcessStep((prev) => (prev < 4 ? prev + 1 : prev));
+    }, 750);
 
     try {
       const result = await uploadDocument(file, true, forceOcr);
       clearInterval(stepInterval);
-      setProcessStep(3);
+      setProcessStep(4);
       setTimeout(() => {
         setIsProcessing(false);
         setFile(null);
         if (onUploadSuccess) onUploadSuccess(result);
-      }, 500);
+      }, 400);
     } catch (err) {
       clearInterval(stepInterval);
       setIsProcessing(false);
-      console.error('Upload failed:', err);
-      const detail = err.response?.data?.detail || err.message || 'Failed to upload and process document.';
+      console.error('Upload error:', err);
+      const detail = err.response?.data?.detail || err.message || 'Unable to process this document. Please try again.';
       setErrorMessage(detail);
     }
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-6 mb-6 shadow-sm">
-      <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
+    <div className="bg-white border border-slate-200 rounded-lg p-5 mb-5 shadow-xs">
+      
+      {/* Header */}
+      <div className="flex items-center justify-between pb-3.5 mb-3.5 border-b border-slate-100">
         <div>
-          <h3 className="text-base font-semibold text-slate-900">Upload a document</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Extract metrics, billing data, and compliance from business PDFs.</p>
+          <h3 className="text-sm font-semibold text-slate-900">Upload Document</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Extract and verify sustainability metrics from your PDF bills and manifests.</p>
         </div>
         {onCancel && (
           <button
@@ -103,19 +109,21 @@ export default function UploadDocument({ onUploadSuccess, onCancel }) {
         )}
       </div>
 
+      {/* Error Message Alert */}
       {errorMessage && (
-        <div className="mb-4 p-3 rounded-md bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
+        <div className="mb-4 p-3 rounded bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
           <span>{errorMessage}</span>
         </div>
       )}
 
+      {/* Progress / Step Indicator State */}
       {isProcessing ? (
-        <div className="py-8 text-center space-y-4">
-          <Loader2 className="w-8 h-8 text-teal-700 animate-spin mx-auto" />
+        <div className="py-6 text-center space-y-4">
+          <Loader2 className="w-6 h-6 text-[#0f6b56] animate-spin mx-auto" />
           <div>
-            <h4 className="text-sm font-medium text-slate-900">Processing document...</h4>
-            <p className="text-xs text-slate-500 mt-1">{file?.name}</p>
+            <h4 className="text-sm font-medium text-slate-900">Processing document</h4>
+            <p className="text-xs text-slate-500 mt-0.5">{file?.name}</p>
           </div>
 
           <div className="max-w-xs mx-auto space-y-2 text-left pt-2">
@@ -127,7 +135,7 @@ export default function UploadDocument({ onUploadSuccess, onCancel }) {
                   {isDone ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   ) : isCurrent ? (
-                    <span className="w-3.5 h-3.5 rounded-full border-2 border-teal-700 border-t-transparent animate-spin shrink-0" />
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-[#0f6b56] border-t-transparent animate-spin shrink-0" />
                   ) : (
                     <span className="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0" />
                   )}
@@ -140,14 +148,15 @@ export default function UploadDocument({ onUploadSuccess, onCancel }) {
           </div>
         </div>
       ) : !file ? (
+        /* Drag & Drop Area */
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+          className={`border-2 border-dashed rounded-lg p-7 text-center cursor-pointer transition-colors ${
             isDragging
-              ? 'border-teal-600 bg-teal-50/30'
+              ? 'border-teal-600 bg-teal-50/20'
               : 'border-slate-300 hover:border-slate-400 bg-slate-50/50'
           }`}
         >
@@ -158,27 +167,28 @@ export default function UploadDocument({ onUploadSuccess, onCancel }) {
             onChange={handleFileChange}
             className="hidden"
           />
-          <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
+          <Upload className="w-7 h-7 text-slate-400 mx-auto mb-2.5" />
           <p className="text-sm font-medium text-slate-700">
-            Drag and drop a PDF here
+            Drag & drop your PDF here
           </p>
-          <p className="text-xs text-slate-500 my-1.5">or</p>
+          <p className="text-xs text-slate-500 my-1">or</p>
           <button
             type="button"
-            className="px-3 py-1.5 bg-white border border-slate-300 rounded-md text-xs font-medium text-slate-700 hover:bg-slate-50 shadow-sm"
+            className="px-3 py-1 bg-white border border-slate-300 rounded text-xs font-medium text-slate-700 hover:bg-slate-50 shadow-2xs"
           >
-            Choose File
+            Choose PDF
           </button>
-          <p className="text-[11px] text-slate-400 mt-3">PDF documents only &bull; Up to 10 MB</p>
+          <p className="text-[11px] text-slate-400 mt-2.5">Supported format: PDF &bull; Maximum 25 MB</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <FileText className="w-5 h-5 text-teal-700" />
+        /* Selected File Review */
+        <div className="space-y-3.5">
+          <div className="p-3 rounded bg-slate-50 border border-slate-200 flex items-center justify-between">
+            <div className="flex items-center space-x-2.5">
+              <FileText className="w-4 h-4 text-[#0f6b56]" />
               <div>
-                <p className="text-sm font-medium text-slate-900">{file.name}</p>
-                <p className="text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB</p>
+                <p className="text-xs font-medium text-slate-900">{file.name}</p>
+                <p className="text-[11px] text-slate-500">{(file.size / 1024).toFixed(1)} KB</p>
               </div>
             </div>
             <button
@@ -186,19 +196,19 @@ export default function UploadDocument({ onUploadSuccess, onCancel }) {
               className="p-1 rounded hover:bg-slate-200 text-slate-500"
               title="Remove file"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center justify-between pt-1">
             <label className="flex items-center space-x-2 text-xs text-slate-600 cursor-pointer">
               <input
                 type="checkbox"
                 checked={forceOcr}
                 onChange={(e) => setForceOcr(e.target.checked)}
-                className="rounded border-slate-300 text-teal-700 focus:ring-teal-600"
+                className="rounded border-slate-300 text-[#0f6b56] focus:ring-teal-600"
               />
-              <span>Force Tesseract OCR (for scanned images)</span>
+              <span>Force OCR (for scanned image documents)</span>
             </label>
 
             <div className="flex items-center space-x-2">
@@ -206,7 +216,7 @@ export default function UploadDocument({ onUploadSuccess, onCancel }) {
                 <button
                   type="button"
                   onClick={onCancel}
-                  className="px-3 py-1.5 border border-slate-300 rounded-md text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  className="px-3 py-1.5 border border-slate-200 rounded text-xs font-medium text-slate-700 hover:bg-slate-50"
                 >
                   Cancel
                 </button>
@@ -214,7 +224,7 @@ export default function UploadDocument({ onUploadSuccess, onCancel }) {
               <button
                 type="button"
                 onClick={handleUpload}
-                className="px-4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-md text-xs font-medium transition-colors shadow-sm"
+                className="px-4 py-1.5 bg-[#0f6b56] hover:bg-[#0c5947] text-white rounded text-xs font-semibold transition-colors shadow-2xs"
               >
                 Upload & Extract
               </button>
@@ -222,6 +232,7 @@ export default function UploadDocument({ onUploadSuccess, onCancel }) {
           </div>
         </div>
       )}
+
     </div>
   );
 }

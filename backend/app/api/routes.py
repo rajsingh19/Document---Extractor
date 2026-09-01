@@ -44,16 +44,26 @@ normalization_service = NormalizationService()
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB max limit
+
 @router.get("/health")
-def health_check():
+def health_check(db: Session = Depends(get_db)):
     """System health and integration diagnostic check."""
+    db_status = "connected"
+    try:
+        db.query(Document.id).first()
+    except Exception:
+        db_status = "error"
+
     return {
-        "status": "healthy",
+        "status": "healthy" if db_status == "connected" else "degraded",
         "service": "senseible-document-ai",
         "version": "1.0.0",
+        "database": db_status,
+        "extraction_service": "available",
+        "ocr_available": OCRService.is_ocr_available(),
         "openai_configured": llm_service.is_configured(),
-        "openai_model": llm_service.model,
-        "ocr_available": OCRService.is_ocr_available()
+        "llm_status": "Configured (Live)" if llm_service.is_configured() else "Deterministic Heuristic Engine Active"
     }
 
 @router.post("/documents/upload", status_code=status.HTTP_201_CREATED)
@@ -67,7 +77,8 @@ async def upload_document(
     Upload a PDF sustainability document, check for deterministic SHA-256 duplicate,
     and execute the AI extraction pipeline.
     """
-    if not file.filename.lower().endswith(".pdf"):
+    safe_name = os.path.basename(file.filename or "document.pdf")
+    if not safe_name.lower().endswith(".pdf"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only PDF documents are supported (.pdf)"
@@ -75,6 +86,26 @@ async def upload_document(
 
     file_bytes = await file.read()
     file_size = len(file_bytes)
+
+    if file_size == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty (0 bytes)."
+        )
+
+    if file_size > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File size exceeds maximum allowed limit of 25 MB."
+        )
+
+    # Magic byte validation for valid PDF format
+    if not (file_bytes.startswith(b"%PDF") or b"%PDF-" in file_bytes[:1024]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid PDF format: file header does not contain valid PDF signature (%PDF)."
+        )
+
     file_hash = hashlib.sha256(file_bytes).hexdigest()
 
     # Deterministic duplicate detection: check if exact file was already uploaded
@@ -94,7 +125,7 @@ async def upload_document(
             }
         )
 
-    unique_filename = generate_unique_filename(file.filename)
+    unique_filename = generate_unique_filename(safe_name)
     file_path = os.path.join(UPLOAD_DIR, unique_filename)
 
     try:
@@ -103,12 +134,12 @@ async def upload_document(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save file on disk: {str(e)}"
+            detail="Failed to save file on storage volume."
         )
 
     doc = Document(
         filename=unique_filename,
-        original_filename=file.filename,
+        original_filename=safe_name,
         file_path=file_path,
         file_size=file_size,
         file_hash=file_hash,
