@@ -965,8 +965,8 @@ def copilot_chat(
     db: Session = Depends(get_db)
 ):
     """
-    Senseible AI Copilot conversation endpoint (Step 11B grounded context).
-    Classifies intent, builds grounded context from database, and returns structured response contract.
+    Senseible AI Copilot conversation endpoint (Step 11C grounded Q&A).
+    Classifies intent, builds grounded context from database, and generates factual answer with citations.
     """
     try:
         cleaned_msg = (request.message or "").strip()
@@ -981,7 +981,7 @@ def copilot_chat(
                 detail="Message exceeds maximum allowed length of 2000 characters."
             )
         
-        response = copilot_service.chat(db, cleaned_msg)
+        response = copilot_service.chat(db, cleaned_msg, history=request.history)
         return response
     except HTTPException:
         raise
@@ -991,6 +991,7 @@ def copilot_chat(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while processing your request with Copilot. Please try again."
         )
+
 
 @router.get("/copilot/context", response_model=CopilotContext)
 def get_copilot_context(

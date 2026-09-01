@@ -26,15 +26,21 @@ MAX_REVIEW_ITEMS = 10
 MAX_SOURCES = 20
 MAX_METRICS = 15
 
-def classify_intent(query: str) -> str:
+def classify_intent(query: str, history: Optional[List[Dict[str, str]]] = None) -> str:
     """
     Deterministic intent router based on normalized pattern matching.
-    Priority-ordered with GENERAL_HELP fallback.
+    Priority-ordered with conversational follow-up resolution and GENERAL_HELP fallback.
     """
     q = (query or "").strip().lower()
 
     if not q:
         return "GENERAL_HELP"
+
+    # Contextual follow-up resolution (e.g. "What about previous month?", "How did that change?")
+    combined_context = q
+    if history:
+        for turn in history[-4:]:
+            combined_context += " " + turn.get("content", "").lower()
 
     # 1. DOCUMENT_REVIEW: Items needing attention or verification
     if any(k in q for k in [
@@ -68,7 +74,8 @@ def classify_intent(query: str) -> str:
     # 5. TREND_ANALYSIS: Period-over-period comparisons and trajectory
     if any(k in q for k in [
         "trend", "trends", "historical", "how has", "how have", "change over time", 
-        "increased", "decreased", "period over period", "month over month", "vs last month"
+        "increased", "decreased", "period over period", "month over month", "vs last month",
+        "previous period", "previous month", "how did that change", "what about before"
     ]):
         return "TREND_ANALYSIS"
 
@@ -77,7 +84,7 @@ def classify_intent(query: str) -> str:
         "consumption", "electricity", "energy", "water", "fuel", "diesel", 
         "kwh", "kl", "waste", "hazardous", "metric", "metrics", "latest value", 
         "total cost", "payable amount", "peak demand"
-    ]):
+    ]) or (history and any(k in combined_context for k in ["electricity", "water", "fuel", "waste", "emission"]) and any(f in q for f in ["what about", "how much", "previous"])):
         return "METRIC_QUERY"
 
     # 7. DOCUMENT_SEARCH: Finding, listing, or checking documents
@@ -94,7 +101,7 @@ def classify_intent(query: str) -> str:
 
 class CopilotContextService:
     """
-    Senseible AI Copilot Grounded Context Layer (Step 11B).
+    Senseible AI Copilot Grounded Context Layer (Step 11B & 11C).
     Gathers, validates, and compacts factual data from documents, metrics, evidence,
     and deterministic insights without hallucination or LLM generation.
     """
@@ -144,12 +151,18 @@ class CopilotContextService:
                 ))
         return sources
 
-    def build_context(self, db: Session, query: str) -> CopilotContext:
+    def build_context(
+        self,
+        db: Session,
+        query: str,
+        history: Optional[List[Dict[str, str]]] = None
+    ) -> CopilotContext:
         """
         Build compact, intent-aware grounded context object from real Senseible data.
         """
-        intent = classify_intent(query)
+        intent = classify_intent(query, history=history)
         summary = self.build_summary(db)
+
 
         docs_ctx: List[DocumentContext] = []
         metrics_ctx: List[MetricContext] = []
@@ -339,11 +352,18 @@ class CopilotContextService:
 
         # 6. Intent: METRIC_QUERY
         elif intent == "METRIC_QUERY":
-            matched_metrics = []
+            q_lower = query.lower()
+            exact_type_matches = []
+            category_matches = []
+
             for m in all_metrics:
-                if any(w in query.lower() for w in m.metric_type.split("_")) or any(w in query.lower() for w in [m.category, m.unit.lower()]):
-                    matched_metrics.append(m)
-            
+                type_words = m.metric_type.split("_")
+                if any(w in q_lower for w in type_words if len(w) > 3):
+                    exact_type_matches.append(m)
+                elif m.category in q_lower or (m.unit and m.unit.lower() in q_lower):
+                    category_matches.append(m)
+
+            matched_metrics = exact_type_matches if exact_type_matches else category_matches
             selected_metrics = (matched_metrics if matched_metrics else all_metrics)[:MAX_METRICS]
             for m in selected_metrics:
                 metrics_ctx.append(MetricContext(

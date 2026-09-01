@@ -147,6 +147,7 @@ export default function App() {
         ) : activeTab === 'copilot' ? (
           <Copilot
             onNavigate={handleNavTab}
+            onSelectDocument={handleSelectDocument}
           />
         ) : activeTab === 'metrics' ? (
           <Metrics

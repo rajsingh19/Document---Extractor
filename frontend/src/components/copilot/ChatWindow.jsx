@@ -9,7 +9,8 @@ export default function ChatWindow({
   errorMessage = null,
   onRetry,
   onSelectQuestion,
-  onSelectAction
+  onSelectAction,
+  onSelectSource
 }) {
   const bottomRef = useRef(null);
 
@@ -48,6 +49,7 @@ export default function ChatWindow({
               key={index}
               message={msg}
               onSelectAction={onSelectAction}
+              onSelectSource={onSelectSource}
             />
           ))}
 
@@ -56,7 +58,7 @@ export default function ChatWindow({
             <div className="flex justify-start">
               <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 text-xs text-slate-600 shadow-2xs flex items-center space-x-2">
                 <Loader2 className="w-3.5 h-3.5 text-[#0f6b56] animate-spin shrink-0" />
-                <span>Analyzing your data...</span>
+                <span>Analyzing your Senseible data...</span>
               </div>
             </div>
           )}

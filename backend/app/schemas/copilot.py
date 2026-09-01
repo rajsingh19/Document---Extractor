@@ -64,8 +64,14 @@ class CopilotContext(BaseModel):
     sources: List[SourceContext] = Field(default_factory=list)
     historical_comparisons: List[Dict[str, Any]] = Field(default_factory=list)
 
+class CopilotAction(BaseModel):
+    type: str = Field(default="VIEW_DOCUMENT", description="Action type: VIEW_DOCUMENT, VIEW_METRIC")
+    label: str = Field(..., description="Action button label")
+    target: Optional[str] = Field(default=None, description="Navigation target URL or route")
+
 class CopilotRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000, description="User question or prompt for Copilot")
+    history: Optional[List[Dict[str, str]]] = Field(default_factory=list, description="Recent conversation turns for follow-up resolution")
 
     @field_validator("message")
     @classmethod
@@ -79,6 +85,7 @@ class CopilotResponse(BaseModel):
     answer: str = Field(..., description="Assistant response text")
     intent: Optional[str] = Field(default=None, description="Identified user query intent")
     sources: List[SourceContext] = Field(default_factory=list, description="Referenced document or metric sources")
-    actions: List[str] = Field(default_factory=list, description="Suggested follow-up actions")
+    actions: List[Any] = Field(default_factory=list, description="Suggested follow-up actions or navigation targets")
     context_available: bool = Field(default=False, description="Whether grounded context was built")
     summary: Optional[CopilotSummary] = Field(default=None, description="High level metric summary counts")
+

@@ -1,9 +1,8 @@
 import React from 'react';
-import { Bot, User, Sparkles, CheckCircle2, FileText, ArrowRight } from 'lucide-react';
+import { Bot, User, Sparkles, CheckCircle2, FileText, ArrowRight, ExternalLink } from 'lucide-react';
 
-export default function ChatMessage({ message, onSelectAction }) {
+export default function ChatMessage({ message, onSelectAction, onSelectSource }) {
   const isUser = message.role === 'user';
-  const isAssistant = message.role === 'assistant';
 
   if (isUser) {
     return (
@@ -32,36 +31,50 @@ export default function ChatMessage({ message, onSelectAction }) {
           {message.content}
         </div>
 
-        {/* Sources (if provided) */}
+        {/* Verified Sources Chips */}
         {message.sources && message.sources.length > 0 && (
           <div className="pt-2 border-t border-slate-100 space-y-1.5">
             <span className="text-[11px] font-medium text-slate-400">Sources:</span>
             <div className="flex flex-wrap gap-1.5">
-              {message.sources.map((src, i) => (
-                <span key={i} className="inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-slate-50 border border-slate-200 text-[11px] text-slate-600">
-                  <FileText className="w-3 h-3 text-slate-400" />
-                  <span>{typeof src === 'string' ? src : src.name || 'Document'}</span>
-                </span>
-              ))}
+              {message.sources.map((src, i) => {
+                const docName = typeof src === 'string' ? src : (src.document_name || src.filename || 'Document');
+                const docId = typeof src === 'object' ? src.document_id : null;
+                const fieldName = typeof src === 'object' && src.field ? ` (${src.field.replace(/_/g, ' ')})` : '';
+
+                return (
+                  <button
+                    key={i}
+                    onClick={() => onSelectSource && docId && onSelectSource(docId)}
+                    className="inline-flex items-center space-x-1 px-2 py-1 rounded bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[11px] text-slate-700 font-medium transition-colors group cursor-pointer"
+                    title={typeof src === 'object' && src.source_text ? `Evidence: "${src.source_text}"` : docName}
+                  >
+                    <FileText className="w-3 h-3 text-[#0f6b56] group-hover:text-teal-800" />
+                    <span>{docName}{fieldName}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* Actions (if provided) */}
+        {/* Suggested Next Steps / Actions */}
         {message.actions && message.actions.length > 0 && (
           <div className="pt-2 border-t border-slate-100 space-y-1.5">
             <span className="text-[11px] font-medium text-slate-400">Suggested Next Steps:</span>
             <div className="flex flex-wrap gap-1.5">
-              {message.actions.map((act, i) => (
-                <button
-                  key={i}
-                  onClick={() => onSelectAction && onSelectAction(act)}
-                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[11px] font-medium text-slate-700 transition-colors"
-                >
-                  <span>{act}</span>
-                  <ArrowRight className="w-2.5 h-2.5 text-slate-400" />
-                </button>
-              ))}
+              {message.actions.map((act, i) => {
+                const label = typeof act === 'string' ? act : (act.label || 'Action');
+                return (
+                  <button
+                    key={i}
+                    onClick={() => onSelectAction && onSelectAction(act)}
+                    className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[11px] font-medium text-slate-700 transition-colors"
+                  >
+                    <span>{label}</span>
+                    <ArrowRight className="w-2.5 h-2.5 text-slate-400" />
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

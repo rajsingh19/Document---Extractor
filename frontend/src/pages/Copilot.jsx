@@ -5,7 +5,7 @@ import ChatInput from '../components/copilot/ChatInput';
 import SuggestedQuestions from '../components/copilot/SuggestedQuestions';
 import { askCopilot } from '../services/api';
 
-export default function Copilot({ onNavigate }) {
+export default function Copilot({ onNavigate, onSelectDocument }) {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
@@ -15,6 +15,12 @@ export default function Copilot({ onNavigate }) {
     const question = text.trim();
     if (!question || isLoading) return;
 
+    // Prepare conversational history turns (last 6 messages)
+    const historyPayload = messages.slice(-6).map((m) => ({
+      role: m.role,
+      content: m.content
+    }));
+
     // Append user message immediately
     const newMessages = [...messages, { role: 'user', content: question }];
     setMessages(newMessages);
@@ -23,7 +29,7 @@ export default function Copilot({ onNavigate }) {
     setLastFailedMessage(null);
 
     try {
-      const response = await askCopilot(question);
+      const response = await askCopilot(question, historyPayload);
       setMessages([
         ...newMessages,
         {
@@ -37,8 +43,7 @@ export default function Copilot({ onNavigate }) {
     } catch (err) {
       console.error('Copilot request error:', err);
       setLastFailedMessage(question);
-      // Safe, user-friendly error without stack traces
-      setErrorMessage("Unable to reach the Copilot service.");
+      setErrorMessage("Unable to reach the Copilot service. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -56,8 +61,40 @@ export default function Copilot({ onNavigate }) {
     setLastFailedMessage(null);
   };
 
-  const handleSelectAction = (actionText) => {
-    handleSendMessage(actionText);
+  const handleSelectSource = (docId) => {
+    if (docId && onSelectDocument) {
+      onSelectDocument({ id: docId });
+    }
+  };
+
+  const handleSelectAction = (action) => {
+    if (typeof action === 'string') {
+      handleSendMessage(action);
+      return;
+    }
+
+    if (action.target) {
+      if (action.target.startsWith('/documents/')) {
+        const idStr = action.target.replace('/documents/', '');
+        const docId = parseInt(idStr, 10);
+        if (docId && onSelectDocument) {
+          onSelectDocument({ id: docId });
+          return;
+        }
+      }
+      if (action.target === '/documents' && onNavigate) {
+        onNavigate('documents');
+        return;
+      }
+      if (action.target === '/metrics' && onNavigate) {
+        onNavigate('metrics');
+        return;
+      }
+    }
+
+    if (action.label) {
+      handleSendMessage(action.label);
+    }
   };
 
   return (
@@ -77,9 +114,10 @@ export default function Copilot({ onNavigate }) {
         onRetry={handleRetry}
         onSelectQuestion={handleSendMessage}
         onSelectAction={handleSelectAction}
+        onSelectSource={handleSelectSource}
       />
 
-      {/* 3. SUGGESTED QUESTIONS (SHOW ONCE CONVERSATION ACTIVE) */}
+      {/* 3. SUGGESTED QUESTIONS (SHOWN ONCE CONVERSATION ACTIVE) */}
       {messages.length > 0 && (
         <div className="pt-1">
           <SuggestedQuestions
