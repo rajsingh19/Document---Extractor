@@ -13,7 +13,10 @@ from backend.app.schemas.extraction import (
     CarbonEmissionsMetrics,
     WaterAndWasteMetrics,
     CertificationAndCompliance,
-    LineItem
+    LineItem,
+    FieldEvidence,
+    QualitySummary,
+    ExtractionMetadata
 )
 
 __all__ = [
@@ -29,5 +32,8 @@ __all__ = [
     "CarbonEmissionsMetrics",
     "WaterAndWasteMetrics",
     "CertificationAndCompliance",
-    "LineItem"
+    "LineItem",
+    "FieldEvidence",
+    "QualitySummary",
+    "ExtractionMetadata"
 ]

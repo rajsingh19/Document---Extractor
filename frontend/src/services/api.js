@@ -49,6 +49,30 @@ export const processDocument = async (id, forceOcr = false) => {
   return response.data;
 };
 
+export const verifyField = async (id, fieldName) => {
+  const response = await api.put(`/documents/${id}/verify-field`, { field_name: fieldName });
+  return response.data;
+};
+
+export const correctField = async (id, fieldName, correctedValue, unit = null) => {
+  const response = await api.put(`/documents/${id}/correct-field`, {
+    field_name: fieldName,
+    corrected_value: correctedValue,
+    unit: unit
+  });
+  return response.data;
+};
+
+export const updateReviewStatus = async (id, reviewStatus) => {
+  const response = await api.put(`/documents/${id}/review-status`, { review_status: reviewStatus });
+  return response.data;
+};
+
+export const getAuditTrail = async (id) => {
+  const response = await api.get(`/documents/${id}/audit-trail`);
+  return response.data;
+};
+
 export const deleteDocument = async (id) => {
   const response = await api.delete(`/documents/${id}`);
   return response.data;

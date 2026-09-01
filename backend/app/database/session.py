@@ -1,11 +1,12 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from backend.app.database.base import Base
+from backend.app.models.document import Document
+from backend.app.models.audit import AuditLog
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./senseible_documents.db")
 
-# For SQLite, connect_args needed for multi-threaded FastAPI workers
 engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
@@ -23,5 +24,24 @@ def get_db():
         db.close()
 
 def init_db():
-    """Create all tables in the database."""
+    """Create all tables and perform lightweight column migrations if needed."""
     Base.metadata.create_all(bind=engine)
+    
+    # Auto-migration for SQLite columns added in Step 3
+    with engine.connect() as conn:
+        try:
+            result = conn.execute(text("PRAGMA table_info(documents)"))
+            existing_cols = [row[1] for row in result.fetchall()]
+            
+            if "review_status" not in existing_cols:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN review_status VARCHAR(50) DEFAULT 'NEEDS_REVIEW'"))
+            if "quality_score" not in existing_cols:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN quality_score FLOAT DEFAULT 0.0"))
+            if "quality_summary" not in existing_cols:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN quality_summary JSON"))
+            if "field_corrections" not in existing_cols:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN field_corrections JSON"))
+                
+            conn.commit()
+        except Exception as e:
+            print(f"Database migration notice: {e}")

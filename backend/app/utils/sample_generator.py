@@ -302,16 +302,8 @@ def generate_sample_scanned_receipt_pdf(output_path: str) -> str:
     image = Image.new('RGB', (img_width, img_height), color=(248, 246, 240))
     draw = ImageDraw.Draw(image)
     
-    # Draw a simulated paper border and fold lines
     draw.rectangle([(20, 20), (img_width - 20, img_height - 20)], outline=(180, 175, 160), width=2)
     
-    # Try default font
-    try:
-        font_large = ImageFont.load_default()
-    except Exception:
-        font_large = None
-    
-    # Simulate realistic scanned text lines for industrial fuel & waste receipt
     lines = [
         "============================================================",
         "          INDUSTRIAL FUEL & WASTE LOG MANIFEST              ",
@@ -350,11 +342,115 @@ def generate_sample_scanned_receipt_pdf(output_path: str) -> str:
         draw.text((45, y), line, fill=(30, 30, 35))
         y += 24
         
-    # Add subtle simulated scan noise / stamp
     draw.rectangle([(500, 750), (720, 850)], outline=(180, 50, 50), width=3)
     draw.text((515, 780), "AUTHENTICATED OCR SCAN", fill=(180, 50, 50))
     draw.text((535, 810), "CPCB AUDIT PASS", fill=(180, 50, 50))
     
-    # Save as image-only PDF
     image.save(output_path, "PDF", resolution=100.0)
+    return output_path
+
+def generate_sample_adversarial_invoice(output_path: str) -> str:
+    """
+    Generate an Adversarial Test PDF containing ambiguous numbers:
+    - Invoice monetary amount: ₹1,00,000.00 (INR)
+    - Electricity consumption: 100,000.00 kWh
+    - Fuel quantity: 1,000.00 Liters
+    - Unrelated numbers: Purchase Order PO-998877, HSN Code 27160000, Tax ₹18,000.00
+    - Missing water info (No mention of water)
+    - Missing waste info (No mention of waste)
+    - Compliance status: Not mentioned anywhere
+    
+    Tests that:
+    1. System does NOT confuse monetary amount ₹1,00,000 with 100,000 kWh or 1,000 L fuel.
+    2. Missing water_consumption_kl and waste quantities remain strictly null.
+    3. Missing compliance_status remains null instead of inventing "Compliant".
+    """
+    doc = SimpleDocTemplate(output_path, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'DocTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        leading=20,
+        textColor=colors.HexColor('#1E1B4B'),
+        alignment=1
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'SubTitle',
+        parent=styles['Normal'],
+        fontSize=10,
+        leading=14,
+        textColor=colors.HexColor('#475569'),
+        alignment=1
+    )
+    
+    section_style = ParagraphStyle(
+        'SectionHeading',
+        parent=styles['Heading2'],
+        fontSize=11,
+        leading=15,
+        textColor=colors.HexColor('#0F172A'),
+        spaceBefore=8,
+        spaceAfter=4
+    )
+    
+    body_style = ParagraphStyle(
+        'BodyText',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor('#1E293B')
+    )
+    
+    story = []
+    story.append(Paragraph("BHARAT HEAVY ENGINEERING MSME INVOICE", title_style))
+    story.append(Paragraph("Commercial & Utility Supply Manifest -- ADVERSARIAL TEST DOCKET", subtitle_style))
+    story.append(Spacer(1, 10))
+    
+    header_data = [
+        [Paragraph("<b>Company:</b> Bharat Heavy Engineering Pvt. Ltd.", body_style), Paragraph("<b>Purchase Order:</b> PO-998877", body_style)],
+        [Paragraph("<b>GSTIN:</b> 27AAACB5544R1Z3", body_style), Paragraph("<b>Invoice Date:</b> 2024-10-15", body_style)],
+        [Paragraph("<b>HSN Code:</b> 27160000 (Electrical Energy)", body_style), Paragraph("<b>Billing Month:</b> October 2024", body_style)]
+    ]
+    t_header = Table(header_data, colWidths=[270, 270])
+    t_header.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F1F5F9')),
+        ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#CBD5E1')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('TOPPADDING', (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+    ]))
+    story.append(t_header)
+    story.append(Spacer(1, 10))
+    
+    story.append(Paragraph("<b>1. Detailed Quantities & Tariff Line Items</b>", section_style))
+    table_data = [
+        ["Item Description", "HSN / Item Ref", "Quantity", "Unit", "Total Charge (INR)"],
+        ["Grid Electricity Supply", "HSN 27160000", "100,000.00", "kWh", "75,000.00"],
+        ["High Speed Diesel (HSD) Fuel Supply", "HSN 27101930", "1,000.00", "Liters", "10,000.00"],
+        ["Generator Maintenance & Tariff Service", "HSN 998719", "1.00", "Service", "15,000.00"],
+        ["Net Invoice Total Payable Amount", "-", "-", "-", "INR 1,00,000.00"]
+    ]
+    t_table = Table(table_data, colWidths=[170, 90, 90, 65, 125])
+    t_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#312E81')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#F8FAFC')]),
+        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#EEF2FF')),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+    ]))
+    story.append(t_table)
+    story.append(Spacer(1, 10))
+    
+    story.append(Paragraph("<b>Note:</b> Net Payable Invoice Value is Rs. 1,00,000.00. Applicable GST Tax @ 18% included (INR 18,000.00).", body_style))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph("<i>Notice: This commercial docket contains zero information regarding water usage or waste management.</i>", body_style))
+    
+    doc.build(story)
     return output_path

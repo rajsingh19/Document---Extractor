@@ -81,7 +81,10 @@ class ExtractionPipelineService:
             doc.status = "RUNNING_LLM"
             db.commit()
 
-            raw_extracted_dict = self.llm_service.extract_sustainability_data(extracted_text)
+            raw_extracted_dict = self.llm_service.extract_sustainability_data(
+                extracted_text,
+                extraction_method=extraction_method
+            )
 
             # Step 4: Validate structured JSON with Pydantic
             doc.status = "VALIDATING"
@@ -96,6 +99,9 @@ class ExtractionPipelineService:
             doc.document_type = validated_data.document_type
             doc.reporting_period = validated_data.period.billing_month or validated_data.period.issue_date
             doc.confidence_score = validated_data.confidence_score
+            doc.quality_score = validated_data.quality_summary.quality_score
+            doc.quality_summary = validated_data.quality_summary.model_dump()
+            doc.review_status = validated_data.metadata.review_status or "NEEDS_REVIEW"
             doc.total_energy_kwh = validated_data.energy.electricity_kwh
             doc.total_emissions_tco2e = (
                 validated_data.carbon_emissions.total_ghg_emissions_tco2e or 

@@ -9,10 +9,10 @@ class CompanyInfo(BaseModel):
     contact_email: Optional[str] = Field(None, description="Official email or representative email")
 
 class PeriodInfo(BaseModel):
-    billing_month: Optional[str] = Field(None, description="e.g. October 2024, Q3 2024")
+    billing_month: Optional[str] = Field(None, description="e.g. October 2024, Q3 2024, FY2023-24")
     start_date: Optional[str] = Field(None, description="Start date YYYY-MM-DD or string")
     end_date: Optional[str] = Field(None, description="End date YYYY-MM-DD or string")
-    issue_date: Optional[str] = Field(None, description="Date document was issued")
+    issue_date: Optional[str] = Field(None, description="Date document was issued YYYY-MM-DD or string")
 
 class EnergyMetrics(BaseModel):
     electricity_kwh: Optional[float] = Field(None, description="Total active electricity consumption in kWh / Units")
@@ -21,13 +21,13 @@ class EnergyMetrics(BaseModel):
     renewable_energy_kwh: Optional[float] = Field(None, description="Solar/Wind/Renewable energy generated or consumed in kWh")
     fuel_diesel_liters: Optional[float] = Field(None, description="Diesel / HSD consumption in Liters")
     natural_gas_png_cng: Optional[float] = Field(None, description="Natural gas / PNG / CNG in SCM / MMBTU / kg")
-    total_energy_cost_inr: Optional[float] = Field(None, description="Total energy cost or bill amount")
+    total_energy_cost_inr: Optional[float] = Field(None, description="Total energy cost or bill amount (numerical)")
     currency: Optional[str] = Field("INR", description="Currency symbol or code")
 
 class CarbonEmissionsMetrics(BaseModel):
     scope_1_direct_tco2e: Optional[float] = Field(None, description="Scope 1 Direct GHG emissions (Fuel, Generators, Fleet) in metric tonnes CO2e")
     scope_2_indirect_tco2e: Optional[float] = Field(None, description="Scope 2 Indirect GHG emissions (Purchased Grid Electricity) in metric tonnes CO2e")
-    total_ghg_emissions_tco2e: Optional[float] = Field(None, description="Total Scope 1 + Scope 2 emissions in tCO2e")
+    total_ghg_emissions_tco2e: Optional[float] = Field(None, description="Total Scope 1 + Scope 2 emissions in tCO2e explicitly stated")
     emission_intensity_per_unit: Optional[str] = Field(None, description="e.g. 0.82 kg CO2e / kWh or kg CO2e / unit produced")
 
 class WaterAndWasteMetrics(BaseModel):
@@ -45,23 +45,56 @@ class CertificationAndCompliance(BaseModel):
 
 class LineItem(BaseModel):
     item_description: str = Field(..., description="Line item description")
-    quantity: Optional[float] = Field(None, description="Quantity")
-    unit: Optional[str] = Field(None, description="Unit of measurement (kWh, liters, kg, MT, kL)")
+    quantity: Optional[float] = Field(None, description="Quantity (numerical)")
+    unit: Optional[str] = Field(None, description="Unit of measurement (kWh, liters, kg, MT, kL, charges)")
     unit_rate: Optional[float] = Field(None, description="Rate per unit")
     total_amount: Optional[float] = Field(None, description="Total amount or charge")
+
+class FieldEvidence(BaseModel):
+    field: str = Field(..., description="Extracted field name (e.g. electricity_kwh, company_name, total_cost)")
+    value: Optional[Any] = Field(None, description="Extracted numerical or string value")
+    unit: Optional[str] = Field(None, description="Unit associated with the value (e.g. kWh, Liters, INR, kL, kg, tCO2e)")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Field-level confidence score (0.0 to 1.0)")
+    confidence_level: str = Field("HIGH", description="HIGH (>=0.9), MEDIUM (0.7-0.89), LOW (<0.7)")
+    source_text: Optional[str] = Field(None, description="Exact textual excerpt from the document verifying this extracted value")
+    is_verified: bool = Field(False, description="Whether a human reviewer has verified this field")
+    human_corrected_value: Optional[Any] = Field(None, description="Human corrected value if edited")
+
+class QualitySummary(BaseModel):
+    total_fields: int = Field(0, description="Total important fields evaluated")
+    evidence_backed: int = Field(0, description="Fields supported by verifiable source text evidence")
+    high_confidence: int = Field(0, description="Fields with high confidence (>=0.9)")
+    medium_confidence: int = Field(0, description="Fields with medium confidence (0.7-0.89)")
+    low_confidence: int = Field(0, description="Fields with low confidence (<0.7)")
+    missing_fields: List[str] = Field(default_factory=list, description="Important fields not present in document")
+    human_verified: int = Field(0, description="Fields verified by human reviewer")
+    quality_score: float = Field(0.0, ge=0.0, le=100.0, description="Deterministic Extraction Quality Score (0 to 100)")
+
+class ExtractionMetadata(BaseModel):
+    provider: str = Field("openai", description="'openai' or 'heuristic_fallback'")
+    model: Optional[str] = Field(None, description="LLM model identifier or heuristic engine version")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Overall document confidence score (0.0 to 1.0)")
+    extraction_method: Optional[str] = Field(None, description="'pymupdf' or 'ocr_fallback'")
+    review_status: str = Field("NEEDS_REVIEW", description="'COMPLETED', 'NEEDS_REVIEW', 'VERIFIED'")
+    quality_score: float = Field(0.0, ge=0.0, le=100.0, description="Deterministic Quality Score (0 to 100)")
+    processing_notes: Optional[str] = Field(None, description="Diagnostics, fallback reasoning, or quality notes")
 
 class SustainabilityDocumentExtraction(BaseModel):
     document_type: str = Field(
         ...,
-        description="Category: Electricity Bill, Energy Audit Report, Carbon Footprint Assessment, Water & Waste Log, ESG Compliance Certificate, Fuel Receipt, Environmental Audit"
+        description="Category: Electricity Bill, Fuel Receipt, Water Bill, Waste Manifest, ESG Audit Report, Commercial Invoice, Environmental Audit"
     )
-    confidence_score: float = Field(..., ge=0.0, le=1.0, description="Confidence level of overall extraction (0.0 to 1.0)")
-    executive_summary: str = Field(..., description="A 2-3 sentence executive sustainability summary of the document")
+    confidence_score: float = Field(..., ge=0.0, le=1.0, description="Overall confidence score (0.0 to 1.0)")
+    executive_summary: str = Field(..., description="A concise factual summary based ONLY on explicit document data")
+    metadata: ExtractionMetadata = Field(default_factory=lambda: ExtractionMetadata(provider="openai", confidence=0.9))
+    quality_summary: QualitySummary = Field(default_factory=QualitySummary)
     company: CompanyInfo = Field(default_factory=CompanyInfo)
     period: PeriodInfo = Field(default_factory=PeriodInfo)
     energy: EnergyMetrics = Field(default_factory=EnergyMetrics)
     carbon_emissions: CarbonEmissionsMetrics = Field(default_factory=CarbonEmissionsMetrics)
     water_and_waste: WaterAndWasteMetrics = Field(default_factory=WaterAndWasteMetrics)
     compliance: CertificationAndCompliance = Field(default_factory=CertificationAndCompliance)
-    line_items: List[LineItem] = Field(default_factory=list, description="Granular extracted line items or tariff breakdown")
+    line_items: List[LineItem] = Field(default_factory=list, description="Granular line items or tariff charges")
+    evidence: List[FieldEvidence] = Field(default_factory=list, description="Field-level confidence and source evidence anchors")
+    missing_fields: List[str] = Field(default_factory=list, description="Important fields absent in document")
     raw_key_value_pairs: Dict[str, Any] = Field(default_factory=dict, description="Additional miscellaneous key-value pairs extracted")

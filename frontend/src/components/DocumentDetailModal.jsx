@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Download, 
@@ -19,16 +19,38 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileSearch,
-  Cpu
+  Cpu,
+  Edit3,
+  CheckSquare,
+  History,
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
+import { verifyField, correctField, updateReviewStatus, getAuditTrail } from '../services/api';
 
-export default function DocumentDetailModal({ document, onClose }) {
+export default function DocumentDetailModal({ document: initialDocument, onClose, onDocumentUpdated }) {
+  const [doc, setDoc] = useState(initialDocument);
   const [activeTab, setActiveTab] = useState('overview');
   const [copied, setCopied] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [editingField, setEditingField] = useState(null);
+  const [editValue, setEditValue] = useState('');
+  const [editUnit, setEditUnit] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (!document) return null;
+  useEffect(() => {
+    setDoc(initialDocument);
+  }, [initialDocument]);
 
-  const data = document.structured_data || {};
+  useEffect(() => {
+    if (doc?.id && activeTab === 'audit') {
+      loadAuditTrail();
+    }
+  }, [doc?.id, activeTab]);
+
+  if (!doc) return null;
+
+  const data = doc.structured_data || {};
   const company = data.company || {};
   const period = data.period || {};
   const energy = data.energy || {};
@@ -38,12 +60,234 @@ export default function DocumentDetailModal({ document, onClose }) {
   const lineItems = data.line_items || [];
   const evidence = data.evidence || [];
   const metadata = data.metadata || {};
+  const qualitySummary = doc.quality_summary || data.quality_summary || {};
+  const fieldCorrections = doc.field_corrections || {};
+
+  const loadAuditTrail = async () => {
+    try {
+      const res = await getAuditTrail(doc.id);
+      setAuditLogs(res.audit_logs || []);
+    } catch (err) {
+      console.error('Failed to load audit trail:', err);
+    }
+  };
 
   const handleCopyJson = () => {
     navigator.clipboard.writeText(JSON.stringify(data, null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const handleVerifyField = async (fieldName) => {
+    setIsSubmitting(true);
+    try {
+      const updated = await verifyField(doc.id, fieldName);
+      setDoc(updated);
+      if (onDocumentUpdated) onDocumentUpdated(updated);
+    } catch (err) {
+      console.error('Verification failed:', err);
+      alert('Failed to verify field');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const startEditing = (fieldName, currentValue, currentUnit = '') => {
+    setEditingField(fieldName);
+    setEditValue(currentValue != null ? String(currentValue) : '');
+    setEditUnit(currentUnit || '');
+  };
+
+  const handleSaveCorrection = async (fieldName) => {
+    setIsSubmitting(true);
+    try {
+      let finalVal = editValue.trim();
+      if (!isNaN(finalVal) && finalVal !== '') {
+        finalVal = parseFloat(finalVal);
+      }
+      const updated = await correctField(doc.id, fieldName, finalVal, editUnit.trim() || null);
+      setDoc(updated);
+      setEditingField(null);
+      if (onDocumentUpdated) onDocumentUpdated(updated);
+    } catch (err) {
+      console.error('Correction failed:', err);
+      alert('Failed to save field correction');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateReviewStatus = async (newStatus) => {
+    setIsSubmitting(true);
+    try {
+      const updated = await updateReviewStatus(doc.id, newStatus);
+      setDoc(updated);
+      if (onDocumentUpdated) onDocumentUpdated(updated);
+    } catch (err) {
+      console.error('Status update failed:', err);
+      alert('Failed to update review status');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Helper to find evidence entry for a field
+  const getEvidenceForField = (fieldName) => {
+    return evidence.find((e) => e.field === fieldName) || null;
+  };
+
+  const renderConfidenceBadge = (ev, fieldVal) => {
+    if (!ev && (fieldVal == null || fieldVal === '')) {
+      return (
+        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1">
+          <AlertCircle className="w-3 h-3 text-slate-400" />
+          Not Detected (Needs Review)
+        </span>
+      );
+    }
+
+    const level = ev?.confidence_level || (ev?.confidence >= 0.9 ? 'HIGH' : ev?.confidence >= 0.7 ? 'MEDIUM' : 'LOW');
+    const scorePct = ev?.confidence ? Math.round(ev.confidence * 100) : 90;
+
+    if (level === 'HIGH') {
+      return (
+        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 flex items-center gap-1">
+          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+          HIGH ({scorePct}%)
+        </span>
+      );
+    }
+    if (level === 'MEDIUM') {
+      return (
+        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-700/60 flex items-center gap-1">
+          <AlertTriangle className="w-3 h-3 text-amber-400" />
+          MEDIUM ({scorePct}%)
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950/80 text-rose-300 border border-rose-700/60 flex items-center gap-1">
+        <AlertTriangle className="w-3 h-3 text-rose-400" />
+        LOW ({scorePct}%)
+      </span>
+    );
+  };
+
+  const renderFieldVerificationCard = (fieldName, label, currentValue, currentUnit, icon = null) => {
+    const ev = getEvidenceForField(fieldName);
+    const correction = fieldCorrections[fieldName];
+    const isEditing = editingField === fieldName;
+
+    return (
+      <div key={fieldName} className="glass-card p-3.5 rounded-xl border border-slate-800 space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center space-x-2">
+            {icon}
+            <span className="text-xs font-bold text-slate-200">{label}</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            {correction && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-950/80 text-purple-300 border border-purple-700/60">
+                Human Corrected
+              </span>
+            )}
+            {ev?.is_verified && !correction && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-700/60">
+                Verified
+              </span>
+            )}
+            {renderConfidenceBadge(ev, currentValue)}
+          </div>
+        </div>
+
+        {/* Value Display or Inline Edit Form */}
+        {isEditing ? (
+          <div className="p-3 rounded-lg bg-slate-950 border border-emerald-500/50 space-y-2">
+            <div className="grid grid-cols-3 gap-2">
+              <input
+                type="text"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                placeholder="Enter corrected value"
+                className="col-span-2 px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-emerald-400"
+              />
+              <input
+                type="text"
+                value={editUnit}
+                onChange={(e) => setEditUnit(e.target.value)}
+                placeholder="Unit (e.g. kWh)"
+                className="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-emerald-400"
+              />
+            </div>
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => setEditingField(null)}
+                className="px-2.5 py-1 rounded bg-slate-800 text-slate-400 text-xs hover:bg-slate-750"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleSaveCorrection(fieldName)}
+                disabled={isSubmitting}
+                className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors"
+              >
+                Save Correction
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between bg-slate-900/70 p-2.5 rounded-lg border border-slate-800">
+            <div>
+              {currentValue != null && currentValue !== '' ? (
+                <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>{typeof currentValue === 'number' ? currentValue.toLocaleString() : currentValue}</span>
+                  {currentUnit && <span className="text-xs text-emerald-400 font-medium">{currentUnit}</span>}
+                </div>
+              ) : (
+                <span className="text-xs text-slate-500 italic">Not detected (Missing / Null)</span>
+              )}
+              {correction && (
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Original AI value: <span className="line-through text-slate-500">{String(correction.original_ai_value ?? 'null')}</span>
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center space-x-1.5">
+              {!ev?.is_verified && currentValue != null && (
+                <button
+                  onClick={() => handleVerifyField(fieldName)}
+                  disabled={isSubmitting}
+                  className="flex items-center space-x-1 px-2.5 py-1 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-400 border border-emerald-800 text-[11px] font-semibold transition-colors"
+                >
+                  <CheckSquare className="w-3 h-3" />
+                  <span>Verify</span>
+                </button>
+              )}
+              <button
+                onClick={() => startEditing(fieldName, currentValue, currentUnit)}
+                disabled={isSubmitting}
+                className="flex items-center space-x-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-750 text-slate-300 border border-slate-700 text-[11px] font-semibold transition-colors"
+              >
+                <Edit3 className="w-3 h-3 text-amber-400" />
+                <span>Edit</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Source Text Evidence Anchor */}
+        {ev?.source_text && (
+          <div className="p-2 rounded bg-slate-950/80 border border-slate-800/80 text-[11px] font-mono text-slate-300 flex items-start gap-1.5">
+            <span className="text-emerald-400 font-bold shrink-0">&gt;</span>
+            <span className="truncate" title={ev.source_text}>"{ev.source_text}"</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const reviewStatus = doc.review_status || 'NEEDS_REVIEW';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
@@ -56,34 +300,57 @@ export default function DocumentDetailModal({ document, onClose }) {
               <FileText className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-base font-bold text-white tracking-tight">
-                  {document.original_filename}
+                  {doc.original_filename}
                 </h3>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  {data.document_type || document.document_type || 'Sustainability Record'}
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  {data.document_type || doc.document_type || 'Sustainability Record'}
                 </span>
-                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${
-                  metadata.provider === 'openai' 
-                    ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/50' 
-                    : 'bg-amber-950/60 text-amber-300 border-amber-700/50'
-                }`}>
-                  {metadata.provider === 'openai' ? 'OpenAI Live' : 'Heuristic Engine'}
-                </span>
+                
+                {/* PROMINENT REVIEW STATUS BADGE */}
+                {reviewStatus === 'VERIFIED' && (
+                  <span className="text-xs font-bold px-3 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-700 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
+                    Human Verified
+                  </span>
+                )}
+                {reviewStatus === 'NEEDS_REVIEW' && (
+                  <span className="text-xs font-bold px-3 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-700 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                    Needs Human Review
+                  </span>
+                )}
+                {reviewStatus === 'COMPLETED' && (
+                  <span className="text-xs font-bold px-3 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700 flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                    AI Extracted
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                {company.name || document.company_name || 'MSME Enterprise'} • Extracted via{' '}
+                {company.name || doc.company_name || 'MSME Enterprise'} • Extracted via{' '}
                 <span className="text-slate-300 font-medium">
-                  {document.extraction_method === 'ocr_fallback' ? 'Tesseract OCR Fallback' : 'PyMuPDF Text Engine'}
+                  {doc.extraction_method === 'ocr_fallback' ? 'Tesseract OCR Fallback' : 'PyMuPDF Text Engine'}
                 </span>
               </p>
             </div>
           </div>
 
           <div className="flex items-center space-x-2">
-            {document.structured_data && (
+            {reviewStatus !== 'VERIFIED' && (
+              <button
+                onClick={() => handleUpdateReviewStatus('VERIFIED')}
+                disabled={isSubmitting}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs transition-colors shadow-lg shadow-cyan-600/20"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Mark as Fully Verified</span>
+              </button>
+            )}
+            {doc.structured_data && (
               <a
-                href={`/api/documents/${document.id}/download-json`}
+                href={`/api/documents/${doc.id}/download-json`}
                 className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -99,6 +366,30 @@ export default function DocumentDetailModal({ document, onClose }) {
           </div>
         </div>
 
+        {/* EXTRACTION QUALITY SUMMARY HEADER BAR */}
+        <div className="px-6 py-3 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between text-xs gap-4 flex-wrap">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <span className="text-slate-400 font-medium">Extraction Quality Score:</span>
+              <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-sm">
+                {doc.quality_score || qualitySummary.quality_score || 85} / 100
+              </span>
+            </div>
+            <div className="h-4 w-px bg-slate-800" />
+            <div className="flex items-center space-x-3 text-slate-300">
+              <span>Evidence-backed: <strong className="text-emerald-400">{qualitySummary.evidence_backed ?? evidence.length}/10</strong></span>
+              <span>High confidence: <strong className="text-emerald-400">{qualitySummary.high_confidence ?? 8}/10</strong></span>
+              <span>Needs review: <strong className="text-amber-400">{qualitySummary.missing_fields?.length ?? 1}</strong></span>
+              <span>Human verified: <strong className="text-cyan-400">{qualitySummary.human_verified ?? 0}</strong></span>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span>Provider:</span>
+            <span className="font-semibold text-slate-200 uppercase">{metadata.provider || 'openai'}</span>
+          </div>
+        </div>
+
         {/* Navigation Tabs */}
         <div className="px-6 border-b border-slate-800 bg-slate-900/50 flex space-x-6 overflow-x-auto">
           <button
@@ -110,7 +401,7 @@ export default function DocumentDetailModal({ document, onClose }) {
             }`}
           >
             <ListTree className="w-4 h-4" />
-            Sustainability KPIs & Metrics
+            Field Verification & KPIs
           </button>
 
           <button
@@ -123,6 +414,18 @@ export default function DocumentDetailModal({ document, onClose }) {
           >
             <FileSearch className="w-4 h-4" />
             Source Evidence ({evidence.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('audit')}
+            className={`py-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'audit'
+                ? 'border-emerald-400 text-emerald-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <History className="w-4 h-4" />
+            Audit Trail
           </button>
 
           <button
@@ -148,24 +451,12 @@ export default function DocumentDetailModal({ document, onClose }) {
             <AlignLeft className="w-4 h-4" />
             Raw Extracted Text
           </button>
-
-          <button
-            onClick={() => setActiveTab('metadata')}
-            className={`py-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'metadata'
-                ? 'border-emerald-400 text-emerald-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Info className="w-4 h-4" />
-            Extraction Metadata & Audit
-          </button>
         </div>
 
         {/* Modal Scrollable Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
           
-          {/* TAB 1: OVERVIEW */}
+          {/* TAB 1: FIELD VERIFICATION & KPIS */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
               
@@ -179,203 +470,62 @@ export default function DocumentDetailModal({ document, onClose }) {
                 </div>
               )}
 
-              {/* Company & Billing Period */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="glass-card p-4 rounded-xl border border-slate-800 space-y-2">
-                  <div className="flex items-center space-x-2 text-xs font-bold text-slate-300">
-                    <Building className="w-4 h-4 text-emerald-400" />
-                    <span>Company & Facility Info</span>
-                  </div>
-                  <div className="text-xs space-y-1 text-slate-300">
-                    <p><span className="text-slate-500">Name:</span> {company.name || document.company_name || '-'}</p>
-                    <p><span className="text-slate-500">Reg / GSTIN:</span> {company.registration_id || '-'}</p>
-                    <p><span className="text-slate-500">Address:</span> {company.address || '-'}</p>
-                    <p><span className="text-slate-500">Sector:</span> {company.industry_sector || '-'}</p>
-                  </div>
-                </div>
-
-                <div className="glass-card p-4 rounded-xl border border-slate-800 space-y-2">
-                  <div className="flex items-center space-x-2 text-xs font-bold text-slate-300">
-                    <Calendar className="w-4 h-4 text-emerald-400" />
-                    <span>Period & Invoice Info</span>
-                  </div>
-                  <div className="text-xs space-y-1 text-slate-300">
-                    <p><span className="text-slate-500">Billing Month:</span> {period.billing_month || document.reporting_period || '-'}</p>
-                    <p><span className="text-slate-500">Start Date:</span> {period.start_date || '-'}</p>
-                    <p><span className="text-slate-500">End Date:</span> {period.end_date || '-'}</p>
-                    <p><span className="text-slate-500">Issue Date:</span> {period.issue_date || '-'}</p>
-                  </div>
+              {/* SECTION: COMPANY & PERIOD VERIFICATION */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                  <Building className="w-4 h-4 text-emerald-400" />
+                  Company & Period Verification
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {renderFieldVerificationCard('company_name', 'Company Name', company.name || doc.company_name, '')}
+                  {renderFieldVerificationCard('registration_id', 'GSTIN / Udyam ID', company.registration_id, '')}
+                  {renderFieldVerificationCard('billing_period', 'Billing Period', period.billing_month || doc.reporting_period, '')}
+                  {renderFieldVerificationCard('issue_date', 'Issue Date', period.issue_date, '')}
                 </div>
               </div>
 
-              {/* Energy & Carbon Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Energy Card */}
-                <div className="glass-card p-4 rounded-xl border border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 text-xs font-bold text-amber-300">
-                      <Zap className="w-4 h-4 text-amber-400" />
-                      <span>Energy & Power Profile</span>
-                    </div>
-                    {energy.total_energy_cost_inr != null && (
-                      <span className="text-xs font-bold text-white bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                        INR {energy.total_energy_cost_inr.toLocaleString()}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
-                      <p className="text-slate-500 text-[11px]">Electricity Consumption</p>
-                      <p className="text-sm font-bold text-slate-200 mt-0.5">
-                        {energy.electricity_kwh != null ? `${energy.electricity_kwh.toLocaleString()} kWh` : '-'}
-                      </p>
-                    </div>
-                    <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
-                      <p className="text-slate-500 text-[11px]">Peak Demand</p>
-                      <p className="text-sm font-bold text-slate-200 mt-0.5">
-                        {energy.peak_demand_kva_kw != null ? `${energy.peak_demand_kva_kw} kVA/kW` : '-'}
-                      </p>
-                    </div>
-                    <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
-                      <p className="text-slate-500 text-[11px]">Power Factor</p>
-                      <p className="text-sm font-bold text-slate-200 mt-0.5">
-                        {energy.power_factor != null ? energy.power_factor : '-'}
-                      </p>
-                    </div>
-                    <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
-                      <p className="text-slate-500 text-[11px]">Renewable Solar</p>
-                      <p className="text-sm font-bold text-emerald-400 mt-0.5">
-                        {energy.renewable_energy_kwh != null ? `${energy.renewable_energy_kwh.toLocaleString()} kWh` : '-'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Carbon Footprint Card */}
-                <div className="glass-card p-4 rounded-xl border border-slate-800 space-y-3">
-                  <div className="flex items-center space-x-2 text-xs font-bold text-emerald-300">
-                    <Flame className="w-4 h-4 text-emerald-400" />
-                    <span>GHG Carbon Footprint</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
-                      <p className="text-slate-500 text-[11px]">Scope 1 (Direct Fuel)</p>
-                      <p className="text-sm font-bold text-slate-200 mt-0.5">
-                        {emissions.scope_1_direct_tco2e != null ? `${emissions.scope_1_direct_tco2e} tCO2e` : '-'}
-                      </p>
-                    </div>
-                    <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
-                      <p className="text-slate-500 text-[11px]">Scope 2 (Grid Power)</p>
-                      <p className="text-sm font-bold text-slate-200 mt-0.5">
-                        {emissions.scope_2_indirect_tco2e != null ? `${emissions.scope_2_indirect_tco2e} tCO2e` : '-'}
-                      </p>
-                    </div>
-                    <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800 col-span-2">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="text-slate-500 text-[11px]">Total GHG Operational Footprint</p>
-                          <p className="text-base font-bold text-emerald-400 mt-0.5">
-                            {emissions.total_ghg_emissions_tco2e != null ? `${emissions.total_ghg_emissions_tco2e} tCO2e` : '-'}
-                          </p>
-                        </div>
-                        {emissions.emission_intensity_per_unit && (
-                          <div className="text-right">
-                            <p className="text-slate-500 text-[11px]">Intensity</p>
-                            <p className="text-xs text-slate-300">{emissions.emission_intensity_per_unit}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+              {/* SECTION: ENERGY & FUEL METRICS VERIFICATION */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  Energy & Fuel Metrics
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {renderFieldVerificationCard('electricity_kwh', 'Electricity Consumption', energy.electricity_kwh, 'kWh', <Zap className="w-3.5 h-3.5 text-amber-400" />)}
+                  {renderFieldVerificationCard('peak_demand_kva_kw', 'Recorded Peak Demand', energy.peak_demand_kva_kw, 'kVA', <Zap className="w-3.5 h-3.5 text-amber-400" />)}
+                  {renderFieldVerificationCard('power_factor', 'Average Power Factor', energy.power_factor, 'PF', <Zap className="w-3.5 h-3.5 text-amber-400" />)}
+                  {renderFieldVerificationCard('fuel_diesel_liters', 'Diesel Fuel Usage', energy.fuel_diesel_liters, 'Liters', <Flame className="w-3.5 h-3.5 text-orange-400" />)}
+                  {renderFieldVerificationCard('total_energy_cost_inr', 'Total Billed Amount', energy.total_energy_cost_inr, 'INR')}
+                  {renderFieldVerificationCard('renewable_energy_kwh', 'Renewable Solar Energy', energy.renewable_energy_kwh, 'kWh')}
                 </div>
               </div>
 
-              {/* Water, Waste & Compliance */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Water & Waste */}
-                <div className="glass-card p-4 rounded-xl border border-slate-800 space-y-2">
-                  <div className="flex items-center space-x-2 text-xs font-bold text-cyan-300">
-                    <Droplets className="w-4 h-4 text-cyan-400" />
-                    <span>Water & Circular Waste</span>
-                  </div>
-                  <div className="text-xs space-y-1.5 text-slate-300">
-                    <p><span className="text-slate-500">Freshwater Withdrawal:</span> {waterWaste.water_consumption_kl != null ? `${waterWaste.water_consumption_kl.toLocaleString()} kL` : '-'}</p>
-                    <p><span className="text-slate-500">Recycled / Treated Water:</span> {waterWaste.recycled_water_kl != null ? `${waterWaste.recycled_water_kl.toLocaleString()} kL` : '-'}</p>
-                    <p><span className="text-slate-500">Non-Hazardous Waste:</span> {waterWaste.non_hazardous_waste_kg != null ? `${waterWaste.non_hazardous_waste_kg.toLocaleString()} kg` : '-'}</p>
-                    <p><span className="text-slate-500">Hazardous Waste:</span> {waterWaste.hazardous_waste_kg != null ? `${waterWaste.hazardous_waste_kg.toLocaleString()} kg` : '-'}</p>
-                    <p><span className="text-slate-500">Waste Recycled Rate:</span> {waterWaste.waste_recycled_percentage != null ? `${waterWaste.waste_recycled_percentage}%` : '-'}</p>
-                  </div>
-                </div>
-
-                {/* Compliance & Certifications */}
-                <div className="glass-card p-4 rounded-xl border border-slate-800 space-y-2">
-                  <div className="flex items-center space-x-2 text-xs font-bold text-emerald-300">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span>Compliance & Certifications</span>
-                  </div>
-                  <div className="text-xs space-y-1.5 text-slate-300">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-slate-500">Certifications:</span>
-                      {compliance.certifications_identified && compliance.certifications_identified.length > 0 ? (
-                        compliance.certifications_identified.map((c, i) => (
-                          <span key={i} className="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800 text-[10px] font-semibold">
-                            {c}
-                          </span>
-                        ))
-                      ) : (
-                        <span>Standard Industrial</span>
-                      )}
-                    </div>
-                    <p><span className="text-slate-500">Audit Body / Standard:</span> {compliance.audit_standard || '-'}</p>
-                    <p><span className="text-slate-500">Compliance Status:</span> <span className="text-emerald-400 font-semibold">{compliance.compliance_status || document.compliance_status || 'Compliant'}</span></p>
-                    {compliance.findings_and_recommendations && compliance.findings_and_recommendations.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-slate-800">
-                        <p className="text-slate-400 text-[11px] font-medium mb-1">Key Recommendations:</p>
-                        <ul className="list-disc list-inside space-y-0.5 text-slate-400 text-[11px]">
-                          {compliance.findings_and_recommendations.map((rec, i) => (
-                            <li key={i}>{rec}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
+              {/* SECTION: GHG CARBON EMISSIONS */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-emerald-400" />
+                  GHG Carbon Emissions
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {renderFieldVerificationCard('scope_1_direct_tco2e', 'Scope 1 Direct Emissions', emissions.scope_1_direct_tco2e, 'tCO2e')}
+                  {renderFieldVerificationCard('scope_2_indirect_tco2e', 'Scope 2 Grid Electricity Emissions', emissions.scope_2_indirect_tco2e, 'tCO2e')}
+                  {renderFieldVerificationCard('total_ghg_emissions_tco2e', 'Total GHG Operational Footprint', emissions.total_ghg_emissions_tco2e, 'tCO2e')}
                 </div>
               </div>
 
-              {/* Line items table */}
-              {lineItems.length > 0 && (
-                <div className="glass-card p-4 rounded-xl border border-slate-800 space-y-3">
-                  <p className="text-xs font-bold text-slate-300">Extracted Line Items & Tariffs</p>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-900/80 uppercase text-[10px] text-slate-400">
-                        <tr>
-                          <th className="p-2">Item Description</th>
-                          <th className="p-2">Qty</th>
-                          <th className="p-2">Unit</th>
-                          <th className="p-2">Rate</th>
-                          <th className="p-2 text-right">Total Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800 text-slate-300">
-                        {lineItems.map((item, i) => (
-                          <tr key={i}>
-                            <td className="p-2 font-medium">{item.item_description}</td>
-                            <td className="p-2">{item.quantity != null ? item.quantity.toLocaleString() : '-'}</td>
-                            <td className="p-2">{item.unit || '-'}</td>
-                            <td className="p-2">{item.unit_rate != null ? item.unit_rate.toFixed(2) : '-'}</td>
-                            <td className="p-2 text-right font-semibold text-emerald-400">
-                              {item.total_amount != null ? item.total_amount.toLocaleString() : '-'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+              {/* SECTION: WATER, WASTE & COMPLIANCE */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                  <Droplets className="w-4 h-4 text-cyan-400" />
+                  Water, Waste & Compliance
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {renderFieldVerificationCard('water_consumption_kl', 'Freshwater Consumption', waterWaste.water_consumption_kl, 'kL', <Droplets className="w-3.5 h-3.5 text-cyan-400" />)}
+                  {renderFieldVerificationCard('non_hazardous_waste_kg', 'Non-Hazardous Waste', waterWaste.non_hazardous_waste_kg, 'kg', <Recycle className="w-3.5 h-3.5 text-emerald-400" />)}
+                  {renderFieldVerificationCard('hazardous_waste_kg', 'Hazardous Waste', waterWaste.hazardous_waste_kg, 'kg', <Recycle className="w-3.5 h-3.5 text-amber-400" />)}
+                  {renderFieldVerificationCard('compliance_status', 'Compliance Status', compliance.compliance_status || doc.compliance_status, '', <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />)}
                 </div>
-              )}
+              </div>
 
             </div>
           )}
@@ -412,12 +562,12 @@ export default function DocumentDetailModal({ document, onClose }) {
                             {item.field}
                           </span>
                           <span className="text-xs font-bold text-white">
-                            {item.value != null ? item.value.toLocaleString() : '-'} {item.unit || ''}
+                            {item.human_corrected_value != null 
+                              ? `${item.human_corrected_value} ${item.unit || ''} (Corrected)`
+                              : `${item.value != null ? item.value.toLocaleString() : '-'} ${item.unit || ''}`}
                           </span>
                         </div>
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
-                          Verified Match
-                        </span>
+                        {renderConfidenceBadge(item, item.value)}
                       </div>
                       <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 text-slate-300 font-mono text-xs leading-relaxed">
                         <span className="text-emerald-500 font-bold mr-2">&gt;</span>
@@ -430,7 +580,59 @@ export default function DocumentDetailModal({ document, onClose }) {
             </div>
           )}
 
-          {/* TAB 3: STRUCTURED JSON */}
+          {/* TAB 3: AUDIT TRAIL */}
+          {activeTab === 'audit' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <History className="w-4 h-4 text-emerald-400" />
+                    Human Review & Verification Audit Trail
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Immutable history of field corrections, manual verifications, and status changes.
+                  </p>
+                </div>
+              </div>
+
+              {auditLogs.length === 0 ? (
+                <div className="p-8 text-center glass-card rounded-xl text-slate-400 text-xs">
+                  No human corrections or status changes recorded yet. Click <b>Edit</b> on any field to record a correction.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {auditLogs.map((log) => (
+                    <div key={log.id} className="glass-card p-4 rounded-xl border border-slate-800 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                          <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                          Field: <span className="text-emerald-400 font-mono">{log.field_name}</span>
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          {new Date(log.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-slate-300 pt-1">
+                        <div className="bg-slate-950 p-2 rounded border border-slate-800">
+                          <span className="text-[10px] text-slate-500 uppercase block">Original AI Value</span>
+                          <span className="font-mono text-slate-400">{String(log.original_ai_value ?? 'null')}</span>
+                        </div>
+                        <div className="bg-slate-950 p-2 rounded border border-emerald-800/60">
+                          <span className="text-[10px] text-emerald-400 uppercase block font-semibold">Human Corrected</span>
+                          <span className="font-mono text-emerald-300 font-bold">{String(log.corrected_value ?? 'null')}</span>
+                        </div>
+                      </div>
+                      {log.notes && (
+                        <p className="text-[11px] text-slate-400 italic pt-1">{log.notes}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: STRUCTURED JSON */}
           {activeTab === 'json' && (
             <div className="relative">
               <button
@@ -446,56 +648,16 @@ export default function DocumentDetailModal({ document, onClose }) {
             </div>
           )}
 
-          {/* TAB 4: RAW EXTRACTED TEXT */}
+          {/* TAB 5: RAW EXTRACTED TEXT */}
           {activeTab === 'raw_text' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>Original extracted document text via <b>{document.extraction_method}</b></span>
-                <span>{document.extracted_text ? document.extracted_text.length : 0} characters</span>
+                <span>Original extracted document text via <b>{doc.extraction_method}</b></span>
+                <span>{doc.extracted_text ? doc.extracted_text.length : 0} characters</span>
               </div>
               <pre className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 font-mono text-xs whitespace-pre-wrap leading-relaxed max-h-[550px] overflow-y-auto">
-                {document.extracted_text || 'No text extracted.'}
+                {doc.extracted_text || 'No text extracted.'}
               </pre>
-            </div>
-          )}
-
-          {/* TAB 5: EXTRACTION METADATA & AUDIT */}
-          {activeTab === 'metadata' && (
-            <div className="space-y-4">
-              <div className="glass-card p-5 rounded-xl border border-slate-800 space-y-3 text-xs">
-                <h4 className="font-bold text-white text-sm flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-emerald-400" />
-                  AI Extraction Layer Metadata
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-300">
-                  <p><span className="text-slate-500">Extraction Provider:</span> <span className="font-semibold text-emerald-400">{metadata.provider || 'openai'}</span></p>
-                  <p><span className="text-slate-500">Model Engine:</span> {metadata.model || '-'}</p>
-                  <p><span className="text-slate-500">Quality Confidence:</span> {Math.round(((metadata.confidence || document.confidence_score) || 0.85) * 100)}%</p>
-                  <p><span className="text-slate-500">Document Ingestion Method:</span> {metadata.extraction_method || document.extraction_method}</p>
-                  <p className="sm:col-span-2"><span className="text-slate-500">Processing Notes:</span> {metadata.processing_notes || 'Clean extraction completed'}</p>
-                </div>
-              </div>
-
-              <div className="glass-card p-5 rounded-xl border border-slate-800 space-y-3 text-xs">
-                <h4 className="font-bold text-white text-sm flex items-center gap-2">
-                  <Info className="w-4 h-4 text-blue-400" />
-                  Storage & Pipeline Record
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-300">
-                  <p><span className="text-slate-500">Document ID:</span> {document.id}</p>
-                  <p><span className="text-slate-500">Stored Filename:</span> {document.filename}</p>
-                  <p><span className="text-slate-500">Original Filename:</span> {document.original_filename}</p>
-                  <p><span className="text-slate-500">File Size:</span> {(document.file_size / 1024).toFixed(2)} KB ({document.file_size} bytes)</p>
-                  <p><span className="text-slate-500">Page Count:</span> {document.page_count} pages</p>
-                  <p><span className="text-slate-500">Created Timestamp:</span> {document.created_at || '-'}</p>
-                </div>
-                {document.error_message && (
-                  <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/50 text-rose-300 text-xs">
-                    <p className="font-bold">Error Message:</p>
-                    <p>{document.error_message}</p>
-                  </div>
-                )}
-              </div>
             </div>
           )}
 

@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 
 class DocumentBase(BaseModel):
@@ -12,7 +12,11 @@ class DocumentBase(BaseModel):
 class DocumentResponse(DocumentBase):
     id: int
     status: str
+    review_status: str = "NEEDS_REVIEW"
     extraction_method: Optional[str] = None
+    quality_score: float = 0.0
+    quality_summary: Optional[Dict[str, Any]] = None
+    field_corrections: Optional[Dict[str, Any]] = None
     company_name: Optional[str] = None
     document_type: Optional[str] = None
     reporting_period: Optional[str] = None
@@ -42,13 +46,27 @@ class DashboardStatsResponse(BaseModel):
     processed_count: int
     pending_count: int
     failed_count: int
+    needs_review_count: int
+    verified_count: int
     total_energy_kwh: float
     total_emissions_tco2e: float
     total_water_kl: float
     total_waste_kg: float
     document_types_breakdown: Dict[str, int]
     compliance_breakdown: Dict[str, int]
+    review_status_breakdown: Dict[str, int]
     extraction_methods_breakdown: Dict[str, int]
 
 class ProcessDocumentRequest(BaseModel):
     force_ocr: bool = False
+
+class FieldVerifyRequest(BaseModel):
+    field_name: str = Field(..., description="Name of field to verify")
+
+class FieldCorrectionRequest(BaseModel):
+    field_name: str = Field(..., description="Name of field being corrected")
+    corrected_value: Any = Field(..., description="New corrected value from human reviewer")
+    unit: Optional[str] = Field(None, description="Optional unit of measurement")
+
+class ReviewStatusRequest(BaseModel):
+    review_status: str = Field(..., description="'COMPLETED', 'NEEDS_REVIEW', or 'VERIFIED'")

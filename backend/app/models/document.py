@@ -16,9 +16,21 @@ class Document(Base):
     # Status: PENDING, EXTRACTING_TEXT, RUNNING_LLM, VALIDATING, COMPLETED, FAILED
     status = Column(String(50), default="PENDING", index=True)
     
+    # Human Review Status: COMPLETED, NEEDS_REVIEW, VERIFIED
+    review_status = Column(String(50), default="NEEDS_REVIEW", index=True)
+    
     # Extraction Method: pymupdf, ocr_fallback, hybrid
     extraction_method = Column(String(50), nullable=True)
     
+    # Deterministic Extraction Quality Score (0 to 100)
+    quality_score = Column(Float, default=0.0)
+    
+    # Extraction Quality Breakdown & Audit Metrics (JSON)
+    quality_summary = Column(JSON, nullable=True)
+    
+    # Field Corrections Map (JSON): field_name -> { original_ai_value, corrected_value, unit, updated_at }
+    field_corrections = Column(JSON, nullable=True)
+
     # High-level extracted fields for quick querying & filtering
     company_name = Column(String(255), nullable=True, index=True)
     document_type = Column(String(100), nullable=True, index=True)
@@ -54,7 +66,11 @@ class Document(Base):
             "mime_type": self.mime_type,
             "page_count": self.page_count,
             "status": self.status,
+            "review_status": self.review_status,
             "extraction_method": self.extraction_method,
+            "quality_score": self.quality_score,
+            "quality_summary": self.quality_summary,
+            "field_corrections": self.field_corrections,
             "company_name": self.company_name,
             "document_type": self.document_type,
             "reporting_period": self.reporting_period,
