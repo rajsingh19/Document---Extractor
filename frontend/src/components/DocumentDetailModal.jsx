@@ -24,7 +24,11 @@ import {
   CheckSquare,
   History,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
+  MinusCircle
 } from 'lucide-react';
 import { verifyField, correctField, updateReviewStatus, getAuditTrail } from '../services/api';
 
@@ -37,6 +41,7 @@ export default function DocumentDetailModal({ document: initialDocument, onClose
   const [editValue, setEditValue] = useState('');
   const [editUnit, setEditUnit] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showScoreBreakdown, setShowScoreBreakdown] = useState(false);
 
   useEffect(() => {
     setDoc(initialDocument);
@@ -136,12 +141,25 @@ export default function DocumentDetailModal({ document: initialDocument, onClose
     return evidence.find((e) => e.field === fieldName) || null;
   };
 
-  const renderConfidenceBadge = (ev, fieldVal) => {
+  const notApplicableList = qualitySummary.not_applicable_list || [];
+  const expectedMissingList = qualitySummary.expected_missing_list || qualitySummary.missing_fields || [];
+  const scoringBreakdown = qualitySummary.scoring_breakdown || {};
+
+  const renderConfidenceBadge = (ev, fieldVal, fieldName) => {
     if (!ev && (fieldVal == null || fieldVal === '')) {
+      const isNA = notApplicableList.includes(fieldName);
+      if (isNA) {
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800/80 text-slate-400 border border-slate-700/60 flex items-center gap-1">
+            <MinusCircle className="w-3 h-3 text-slate-500" />
+            Not Applicable
+          </span>
+        );
+      }
       return (
-        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1">
-          <AlertCircle className="w-3 h-3 text-slate-400" />
-          Not Detected (Needs Review)
+        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-700/60 flex items-center gap-1">
+          <AlertCircle className="w-3 h-3 text-amber-400" />
+          Missing (Needs Review)
         </span>
       );
     }
@@ -177,6 +195,7 @@ export default function DocumentDetailModal({ document: initialDocument, onClose
     const ev = getEvidenceForField(fieldName);
     const correction = fieldCorrections[fieldName];
     const isEditing = editingField === fieldName;
+    const isNA = (!currentValue && currentValue !== 0) && notApplicableList.includes(fieldName);
 
     return (
       <div key={fieldName} className="glass-card p-3.5 rounded-xl border border-slate-800 space-y-2.5">
@@ -196,7 +215,7 @@ export default function DocumentDetailModal({ document: initialDocument, onClose
                 Verified
               </span>
             )}
-            {renderConfidenceBadge(ev, currentValue)}
+            {renderConfidenceBadge(ev, currentValue, fieldName)}
           </div>
         </div>
 
@@ -243,8 +262,10 @@ export default function DocumentDetailModal({ document: initialDocument, onClose
                   <span>{typeof currentValue === 'number' ? currentValue.toLocaleString() : currentValue}</span>
                   {currentUnit && <span className="text-xs text-emerald-400 font-medium">{currentUnit}</span>}
                 </div>
+              ) : isNA ? (
+                <span className="text-xs text-slate-500 italic">Not applicable for this document type</span>
               ) : (
-                <span className="text-xs text-slate-500 italic">Not detected (Missing / Null)</span>
+                <span className="text-xs text-amber-400/90 font-medium italic">Missing expected field (Needs review)</span>
               )}
               {correction && (
                 <p className="text-[10px] text-slate-400 mt-0.5">
@@ -367,27 +388,112 @@ export default function DocumentDetailModal({ document: initialDocument, onClose
         </div>
 
         {/* EXTRACTION QUALITY SUMMARY HEADER BAR */}
-        <div className="px-6 py-3 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between text-xs gap-4 flex-wrap">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <span className="text-slate-400 font-medium">Extraction Quality Score:</span>
-              <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-sm">
-                {doc.quality_score || qualitySummary.quality_score || 85} / 100
-              </span>
+        <div className="px-6 py-3 bg-slate-950/90 border-b border-slate-800 flex flex-col gap-3">
+          <div className="flex items-center justify-between text-xs gap-4 flex-wrap">
+            <div className="flex items-center space-x-4 flex-wrap gap-y-2">
+              <div className="flex items-center space-x-2">
+                <span className="text-slate-400 font-medium">Extraction Quality:</span>
+                <span className={`px-2.5 py-0.5 rounded-lg border font-bold text-sm ${
+                  (doc.quality_score ?? qualitySummary.quality_score ?? 85) >= 85
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                    : (doc.quality_score ?? qualitySummary.quality_score ?? 85) >= 70
+                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                    : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                }`}>
+                  {doc.quality_score ?? qualitySummary.quality_score ?? 85} / 100
+                </span>
+              </div>
+              <div className="h-4 w-px bg-slate-800 hidden sm:block" />
+              <div className="flex items-center space-x-3 text-slate-300 flex-wrap gap-y-1">
+                <span>Expected fields: <strong className="text-emerald-400">{qualitySummary.expected_fields_found ?? qualitySummary.total_expected_fields ?? 4} / {qualitySummary.total_expected_fields ?? 4} found</strong></span>
+                <span>Evidence backed: <strong className="text-emerald-400">{qualitySummary.evidence_backed ?? evidence.length} / {qualitySummary.expected_fields_found ?? evidence.length}</strong></span>
+                <span>High confidence: <strong className="text-emerald-400">{qualitySummary.high_confidence ?? 0}</strong></span>
+                {(qualitySummary.medium_confidence || 0) > 0 && (
+                  <span>Medium: <strong className="text-amber-400">{qualitySummary.medium_confidence}</strong></span>
+                )}
+                {(qualitySummary.low_confidence || 0) > 0 && (
+                  <span>Low: <strong className="text-rose-400">{qualitySummary.low_confidence}</strong></span>
+                )}
+                <span>Needs review: <strong className={(qualitySummary.expected_fields_missing || 0) > 0 ? "text-amber-400" : "text-slate-400"}>{qualitySummary.expected_fields_missing ?? 0}</strong></span>
+                {(qualitySummary.not_applicable_fields || 0) > 0 && (
+                  <span>N/A: <strong className="text-slate-400">{qualitySummary.not_applicable_fields}</strong></span>
+                )}
+                <span>Human verified: <strong className="text-cyan-400">{qualitySummary.human_verified ?? 0}</strong></span>
+              </div>
             </div>
-            <div className="h-4 w-px bg-slate-800" />
-            <div className="flex items-center space-x-3 text-slate-300">
-              <span>Evidence-backed: <strong className="text-emerald-400">{qualitySummary.evidence_backed ?? evidence.length}/10</strong></span>
-              <span>High confidence: <strong className="text-emerald-400">{qualitySummary.high_confidence ?? 8}/10</strong></span>
-              <span>Needs review: <strong className="text-amber-400">{qualitySummary.missing_fields?.length ?? 1}</strong></span>
-              <span>Human verified: <strong className="text-cyan-400">{qualitySummary.human_verified ?? 0}</strong></span>
+
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setShowScoreBreakdown(!showScoreBreakdown)}
+                className="flex items-center space-x-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition-colors"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Why this score?</span>
+                {showScoreBreakdown ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
             </div>
           </div>
 
-          <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-            <span>Provider:</span>
-            <span className="font-semibold text-slate-200 uppercase">{metadata.provider || 'openai'}</span>
-          </div>
+          {/* Expandable Deterministic Scoring Breakdown */}
+          {showScoreBreakdown && (
+            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-700/80 text-xs space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  Deterministic Quality Scoring Breakdown
+                </span>
+                <span className="text-slate-400 text-[11px]">
+                  Formula: Base (100) - Penalties = Final Score ({doc.quality_score ?? qualitySummary.quality_score ?? 85}/100)
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+                <div className="bg-slate-950 p-2.5 rounded border border-slate-800">
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Base Score</span>
+                  <span className="font-bold text-emerald-400 text-sm">+{scoringBreakdown.base_score || 100}</span>
+                </div>
+                <div className="bg-slate-950 p-2.5 rounded border border-slate-800">
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">OCR Fallback Penalty</span>
+                  <span className={`font-bold text-sm ${(scoringBreakdown.ocr_penalty || 0) > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                    {(scoringBreakdown.ocr_penalty || 0) > 0 ? `-${scoringBreakdown.ocr_penalty}` : '0 (Digital PDF)'}
+                  </span>
+                </div>
+                <div className="bg-slate-950 p-2.5 rounded border border-slate-800">
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Missing Expected Fields</span>
+                  <span className={`font-bold text-sm ${(scoringBreakdown.expected_missing_penalty || 0) > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
+                    {(scoringBreakdown.expected_missing_penalty || 0) > 0 
+                      ? `-${scoringBreakdown.expected_missing_penalty} (${qualitySummary.expected_fields_missing || 0} missing)` 
+                      : '0 (Complete)'}
+                  </span>
+                </div>
+                <div className="bg-slate-950 p-2.5 rounded border border-slate-800">
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Confidence & Evidence Penalties</span>
+                  <span className={`font-bold text-sm ${(scoringBreakdown.low_confidence_penalty || 0) + (scoringBreakdown.medium_confidence_penalty || 0) + (scoringBreakdown.evidence_penalty || 0) > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
+                    {(scoringBreakdown.low_confidence_penalty || 0) + (scoringBreakdown.medium_confidence_penalty || 0) + (scoringBreakdown.evidence_penalty || 0) > 0
+                      ? `-${(scoringBreakdown.low_confidence_penalty || 0) + (scoringBreakdown.medium_confidence_penalty || 0) + (scoringBreakdown.evidence_penalty || 0)}`
+                      : '0 (High Confidence)'}
+                  </span>
+                </div>
+              </div>
+              {expectedMissingList.length > 0 && (
+                <div className="p-2 rounded bg-amber-950/40 border border-amber-800/50 text-amber-200 text-[11px] flex items-start gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-amber-300">Missing Expected Fields for {data.document_type || doc.document_type || 'this document'}:</span>{' '}
+                    <span className="font-mono text-amber-200">{expectedMissingList.join(', ')}</span> (-10 pts each)
+                  </div>
+                </div>
+              )}
+              {notApplicableList.length > 0 && (
+                <div className="p-2 rounded bg-slate-950 border border-slate-800 text-slate-400 text-[11px] flex items-start gap-1.5">
+                  <MinusCircle className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-slate-300">Not Applicable (0 penalty):</span>{' '}
+                    <span className="font-mono text-slate-400">{notApplicableList.join(', ')}</span> (Outside document scope)
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Navigation Tabs */}
