@@ -64,6 +64,43 @@ class CopilotContext(BaseModel):
     sources: List[SourceContext] = Field(default_factory=list)
     historical_comparisons: List[Dict[str, Any]] = Field(default_factory=list)
 
+class RAGMetric(BaseModel):
+    metric_id: Optional[int] = None
+    metric_name: str
+    metric_type: str
+    category: str
+    value: float
+    unit: str
+    period: Optional[str] = None
+    document_id: int
+    document_name: str
+    source_field: str
+    source_text: Optional[str] = None
+    verification_status: str = "AI_EXTRACTED"
+    confidence: Optional[float] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump()
+
+class RAGContext(BaseModel):
+    query: str
+    intent: str
+    retrieval_mode: str
+    document_id: Optional[int] = None
+    chunks: List[Any] = Field(default_factory=list)
+    rag_metrics: List[RAGMetric] = Field(default_factory=list)
+    sources: List[SourceContext] = Field(default_factory=list)
+    insights: List[InsightContext] = Field(default_factory=list)
+    recommendations: List[Any] = Field(default_factory=list)
+    attention_items: List[Any] = Field(default_factory=list)
+    review_items: List[ReviewContext] = Field(default_factory=list)
+    documents: List[DocumentContext] = Field(default_factory=list)
+    historical_comparisons: List[Dict[str, Any]] = Field(default_factory=list)
+    summary: CopilotSummary = Field(default_factory=CopilotSummary)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump()
+
 class CopilotAction(BaseModel):
     type: str = Field(default="VIEW_DOCUMENT", description="Action type: VIEW_DOCUMENT, VIEW_METRIC")
     label: str = Field(..., description="Action button label")

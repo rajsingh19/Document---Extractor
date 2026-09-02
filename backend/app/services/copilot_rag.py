@@ -3,6 +3,17 @@ import re
 from collections import Counter
 from typing import Dict, List, Optional, Any, Tuple
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from backend.app.models.document import Document
+from backend.app.models.sustainability_metric import SustainabilityMetric
+from backend.app.schemas.copilot import (
+    RAGMetric, RAGContext, SourceContext, InsightContext, DocumentContext,
+    ReviewContext, CopilotSummary
+)
+from backend.app.services.insights_service import insights_service
+from backend.app.services.copilot_recommendations import copilot_recommendation_service
+from backend.app.services.copilot_attention import copilot_attention_service
 
 # ---------------------------------------------------------------------------
 # Schemas (Phase 3 & Phase 14)
@@ -454,3 +465,301 @@ class CopilotVectorIndex:
 # Global singleton instance for convenient backend use
 copilot_rag_chunker = DocumentChunker()
 copilot_vector_index = CopilotVectorIndex()
+
+
+def format_metric_label(key: Optional[str]) -> str:
+    """Format metric_type key into clean human-readable title."""
+    if not key:
+        return "Metric"
+    name_map = {
+        "electricity_consumption": "Electricity Consumption",
+        "renewable_energy": "Renewable Energy",
+        "fuel_consumption": "Fuel Consumption",
+        "peak_demand": "Peak Demand",
+        "scope_1_emissions": "Scope 1 Emissions",
+        "scope1_emissions": "Scope 1 Emissions",
+        "scope_2_emissions": "Scope 2 Emissions",
+        "scope2_emissions": "Scope 2 Emissions",
+        "total_ghg_emissions": "Total GHG Emissions",
+        "total_emissions": "Total GHG Emissions",
+        "water_consumption": "Water Consumption",
+        "recycled_water": "Recycled Water",
+        "hazardous_waste": "Hazardous Waste",
+        "non_hazardous_waste": "Non-Hazardous Waste",
+        "recycled_waste": "Waste Recycled",
+        "energy_cost": "Energy Cost",
+    }
+    return name_map.get(key, key.replace("_", " ").title())
+
+
+class CopilotRAGRouter:
+    """
+    Lightweight deterministic query router (Phase 3).
+    Determines retrieval modes (METRIC, DOCUMENT, HYBRID, EMISSIONS, RECOMMENDATION, ATTENTION, TREND, MISSING_DATA)
+    without relying on the LLM.
+    """
+
+    @staticmethod
+    def route_query(query: str, history: Optional[List[Dict[str, str]]] = None) -> str:
+        q = (query or "").lower().strip()
+        if not q:
+            return "GENERAL"
+
+        # 1. MISSING_DATA / REVIEW / ATTENTION
+        if any(k in q for k in ["need review", "needs review", "attention", "pending review", "unverified", "flagged", "missing", "data gap", "gaps in data"]):
+            if any(k in q for k in ["missing", "data gap", "unfilled", "not applicable"]):
+                return "MISSING_DATA"
+            return "ATTENTION"
+
+        # 2. EMISSIONS REDUCTION / ACTION
+        reduction_verbs = ["reduce", "reduction", "lower", "lowering", "decrease", "cut", "mitigate", "minimize"]
+        emissions_terms = ["emission", "emissions", "carbon", "footprint", "ghg", "scope 1", "scope 2", "scope1", "scope2"]
+        has_reduction = any(v in q for v in reduction_verbs) and any(e in q for e in emissions_terms)
+        if has_reduction or any(k in q for k in ["how can i reduce", "how to reduce", "lower carbon footprint", "where should i focus to reduce"]):
+            return "EMISSIONS"
+
+        # 3. RECOMMENDATIONS / PRIORITY
+        if any(k in q for k in ["focus on first", "focus first", "what should i focus", "biggest opportunity", "recommendation", "recommendations", "next steps", "action recommendation"]):
+            return "RECOMMENDATION"
+
+        # 4. TREND / HISTORICAL
+        if any(k in q for k in ["why did", "trend", "change", "increase", "decrease", "history", "historical", "period over period", "trajectory"]):
+            return "TREND"
+
+        # 5. METRIC QUERY (numerical facts: peak demand, electricity consumption, fuel, water, waste, scope 1, scope 2, total ghg, cost)
+        metric_keywords = ["peak demand", "electricity consumption", "fuel consumption", "water consumption", "scope 1", "scope 2", "total ghg", "active energy", "payable amount", "how much electricity", "how much fuel"]
+        if any(k in q for k in metric_keywords) or (any(w in q for w in ["what is", "how much", "show", "tell me"]) and any(w in q for w in ["demand", "consumption", "emissions", "usage", "cost", "payable"])):
+            return "METRIC"
+
+        # 6. DOCUMENT QUERY (specific document text / solar / details)
+        if any(k in q for k in ["document", "pdf", "bill say", "solar", "clause", "note", "certification", "compliance", "tariff", "summarize"]):
+            return "DOCUMENT"
+
+        return "HYBRID"
+
+
+class CopilotHybridRetriever:
+    """
+    Hybrid Retriever (Phase 2, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15).
+    Combines:
+    1. Semantic document chunks (CopilotVectorIndex)
+    2. Authoritative structured metrics (SustainabilityMetric with exact identity)
+    3. Evidence lineage (SourceContext)
+    4. Deterministic insights (MetricInsight)
+    5. Deterministic recommendations (CopilotRecommendationService)
+    6. Deterministic attention items (CopilotAttentionService)
+    
+    Operates strictly in READ-ONLY mode. Does NOT modify database state.
+    """
+
+    def __init__(self, vector_index: Optional[CopilotVectorIndex] = None):
+        self.vector_index = vector_index or copilot_vector_index
+
+    def retrieve(
+        self,
+        db: Session,
+        query: str,
+        history: Optional[List[Dict[str, str]]] = None,
+        document_id: Optional[int] = None
+    ) -> RAGContext:
+        """
+        Build a strongly typed RAGContext for a query.
+        Guarantees metric identity protection, source lineage, and strict document-scoped filtering.
+        """
+        clean_query = (query or "").strip()
+        retrieval_mode = CopilotRAGRouter.route_query(clean_query, history=history)
+
+        # 1. Sync / populate vector index with documents from DB if empty
+        docs_query = db.query(Document).filter(Document.status == "COMPLETED")
+        if document_id is not None:
+            docs_query = docs_query.filter(Document.id == document_id)
+        all_docs = docs_query.order_by(Document.id.desc()).all()
+
+        if self.vector_index.total_chunks == 0 and all_docs:
+            self.vector_index.build_from_documents(all_docs)
+
+        # 2. Semantic Chunk Retrieval
+        retrieved_chunks: List[RAGChunkResult] = []
+        if retrieval_mode in ("DOCUMENT", "HYBRID", "EMISSIONS", "TREND", "RECOMMENDATION", "METRIC", "ATTENTION", "MISSING_DATA", "GENERAL"):
+            retrieved_chunks = self.vector_index.search(clean_query, top_k=5, document_id=document_id)
+
+        # 3. Authoritative Structured Metric Retrieval
+        metrics_query = db.query(SustainabilityMetric, Document).join(
+            Document, SustainabilityMetric.document_id == Document.id
+        )
+        if document_id is not None:
+            metrics_query = metrics_query.filter(SustainabilityMetric.document_id == document_id)
+        
+        metrics_raw = metrics_query.order_by(SustainabilityMetric.id.desc()).all()
+
+        rag_metrics: List[RAGMetric] = []
+        seen_metric_keys = set()
+
+        for m, doc in metrics_raw:
+            m_key = (m.document_id, m.metric_type)
+            if m_key in seen_metric_keys:
+                continue
+
+            is_relevant = self._is_metric_relevant(m, clean_query, retrieval_mode)
+            if is_relevant:
+                seen_metric_keys.add(m_key)
+                rag_metrics.append(RAGMetric(
+                    metric_id=m.id,
+                    metric_name=format_metric_label(m.metric_type),
+                    metric_type=m.metric_type,
+                    category=m.category,
+                    value=m.value,
+                    unit=m.unit,
+                    period=m.period_end or m.period_start or doc.reporting_period,
+                    document_id=m.document_id,
+                    document_name=doc.original_filename or doc.filename,
+                    source_field=m.source_field,
+                    source_text=m.source_text,
+                    verification_status=m.verification_status,
+                    confidence=m.confidence
+                ))
+
+        # Sort structured metrics by query relevance
+        def score_rag_metric(rm: RAGMetric) -> int:
+            score = 0
+            m_type = rm.metric_type.lower()
+            q_lower = clean_query.lower()
+            m_parts = m_type.split("_")
+            q_words = [w.strip("?,.!") for w in q_lower.split() if len(w.strip("?,.!")) > 2]
+            score += sum(1 for w in q_words if any(w in part or part in w for part in m_parts))
+            for kw in ["electricity", "fuel", "diesel", "water", "peak", "demand", "waste", "renewable", "solar", "emission", "scope"]:
+                if kw in q_lower and kw in m_type:
+                    score += 10
+            return score
+
+        rag_metrics.sort(key=score_rag_metric, reverse=True)
+
+        # 4. Evidence Lineage (SourceContext)
+        sources: List[SourceContext] = []
+        seen_sources = set()
+
+        for rm in rag_metrics:
+            s_key = (rm.document_id, rm.source_field, rm.value)
+            if s_key not in seen_sources:
+                seen_sources.add(s_key)
+                sources.append(SourceContext(
+                    document_id=rm.document_id,
+                    document_name=rm.document_name,
+                    field=rm.source_field,
+                    value=rm.value,
+                    unit=rm.unit,
+                    source_text=rm.source_text
+                ))
+
+        for chunk in retrieved_chunks:
+            s_key = (chunk.document_id, chunk.source_field, chunk.chunk_id)
+            if s_key not in seen_sources and len(sources) < 6:
+                seen_sources.add(s_key)
+                sources.append(SourceContext(
+                    document_id=chunk.document_id,
+                    document_name=chunk.document_name,
+                    field=chunk.source_field,
+                    value=None,
+                    unit=None,
+                    source_text=chunk.text[:200]
+                ))
+
+        # 5. Deterministic Insights Retrieval
+        all_insights = insights_service.generate_metric_insights(db)
+        if document_id is not None:
+            all_insights = [i for i in all_insights if i.source_document_id == document_id]
+        
+        insights_ctx = [
+            InsightContext(
+                category=ins.category,
+                severity=ins.severity,
+                metric_type=ins.metric_type,
+                message=ins.message,
+                current_value=ins.current_value,
+                previous_value=ins.previous_value,
+                percentage_change=ins.percentage_change,
+                source_document_id=ins.source_document_id
+            ) for ins in all_insights[:5]
+        ]
+
+        # 6. Deterministic Recommendations Retrieval
+        recs = copilot_recommendation_service.generate_recommendations(db, query=clean_query)
+        if document_id is not None:
+            recs = [r for r in recs if r.source_document_id == document_id]
+
+        # 7. Deterministic Attention Items Retrieval
+        att_res = copilot_attention_service.get_attention_items(db)
+        att_items = att_res.items
+        if document_id is not None:
+            att_items = [a for a in att_items if a.document_id == document_id]
+
+        # 8. Document Context & Review Items
+        docs_ctx = [
+            DocumentContext(
+                document_id=d.id,
+                filename=d.original_filename or d.filename,
+                document_type=d.document_type,
+                company_name=d.company_name,
+                reporting_period=d.reporting_period,
+                status=d.status,
+                quality_score=float(d.quality_score or 0.0),
+                verification_status=d.review_status or "READY"
+            ) for d in all_docs[:5]
+        ]
+
+        review_docs = [d for d in all_docs if d.review_status == "NEEDS_REVIEW"]
+        review_ctx = [
+            ReviewContext(
+                document_id=d.id,
+                filename=d.original_filename or d.filename,
+                reason=d.error_message or "Extraction fields unconfirmed",
+                quality_score=float(d.quality_score or 0.0),
+                affected_fields=[]
+            ) for d in review_docs[:4]
+        ]
+
+        summary = CopilotSummary(
+            document_count=len(all_docs),
+            documents_needing_review=len(review_docs),
+            verified_documents=len([d for d in all_docs if d.review_status == "VERIFIED"]),
+            metric_count=len(metrics_raw),
+            active_attention_items=len(att_items)
+        )
+
+        return RAGContext(
+            query=clean_query,
+            intent=retrieval_mode,
+            retrieval_mode=retrieval_mode,
+            document_id=document_id,
+            chunks=retrieved_chunks,
+            rag_metrics=rag_metrics,
+            sources=sources,
+            insights=insights_ctx,
+            recommendations=recs,
+            attention_items=att_items,
+            review_items=review_ctx,
+            documents=docs_ctx,
+            summary=summary
+        )
+
+    def _is_metric_relevant(self, m: SustainabilityMetric, query: str, mode: str) -> bool:
+        """Determine if a metric is relevant based on retrieval mode and query keywords."""
+        if mode in ("EMISSIONS", "RECOMMENDATION"):
+            return m.category == "carbon" or m.metric_type in (
+                "scope_1_emissions", "scope_2_emissions", "total_ghg_emissions", "electricity_consumption"
+            )
+        if mode == "METRIC":
+            q_lower = query.lower()
+            q_words = [w.strip("?,.!") for w in q_lower.split() if len(w.strip("?,.!")) > 2]
+            m_parts = m.metric_type.lower().split("_")
+            word_match = any(w in part or part in w for w in q_words for part in m_parts)
+            domain_kw = any(kw in q_lower and kw in m.metric_type.lower() for kw in [
+                "electricity", "fuel", "diesel", "water", "peak", "demand", "waste", "renewable", "solar", "emission", "scope"
+            ])
+            return word_match or domain_kw
+        return True
+
+
+copilot_rag_router = CopilotRAGRouter()
+copilot_hybrid_retriever = CopilotHybridRetriever()
+

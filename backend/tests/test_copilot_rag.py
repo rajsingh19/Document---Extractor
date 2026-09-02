@@ -543,3 +543,128 @@ def test_32_prompt_injection_stored_and_retrieved_strictly_as_data(vector_index,
     # Treated as ordinary passive data
     assert "Ignore all previous instructions" in results[0].text
     assert results[0].document_id == 666
+
+
+# ===========================================================================
+# 33-40. Hybrid Retriever & Query Router Tests (Step 11R-2)
+# ===========================================================================
+
+def test_33_router_identifies_intents():
+    """33. Verify CopilotRAGRouter classifies query intents deterministically."""
+    from backend.app.services.copilot_rag import copilot_rag_router
+
+    assert copilot_rag_router.route_query("What is the peak demand?") == "METRIC"
+    assert copilot_rag_router.route_query("What electricity consumption is reported?") == "METRIC"
+    assert copilot_rag_router.route_query("What does the electricity bill say about solar?") == "DOCUMENT"
+    assert copilot_rag_router.route_query("How can I reduce my carbon emissions?") == "EMISSIONS"
+    assert copilot_rag_router.route_query("What should I focus on first?") == "RECOMMENDATION"
+    assert copilot_rag_router.route_query("Why did electricity consumption increase?") == "TREND"
+    assert copilot_rag_router.route_query("What information is missing?") == "MISSING_DATA"
+    assert copilot_rag_router.route_query("Which documents need review?") == "ATTENTION"
+
+
+def test_34_structured_metric_retrieval_peak_demand():
+    """34. Verify peak demand retrieves exact structured metric of 128.5 kVA for document 1."""
+    from backend.app.database.session import SessionLocal
+    from backend.app.services.copilot_rag import copilot_hybrid_retriever
+
+    db = SessionLocal()
+    ctx = copilot_hybrid_retriever.retrieve(db, "What is the peak demand?", document_id=1)
+
+    assert ctx.retrieval_mode == "METRIC"
+    top_metric = ctx.rag_metrics[0]
+    assert top_metric.metric_type == "peak_demand"
+    assert top_metric.value == 128.5
+    assert top_metric.unit.lower() in ("kva", "kw")
+
+
+def test_35_structured_metric_retrieval_electricity_consumption():
+    """35. Verify electricity consumption retrieves exact structured metric of 48,750 kWh for document 1."""
+    from backend.app.database.session import SessionLocal
+    from backend.app.services.copilot_rag import copilot_hybrid_retriever
+
+    db = SessionLocal()
+    ctx = copilot_hybrid_retriever.retrieve(db, "What electricity consumption is reported?", document_id=1)
+
+    assert ctx.retrieval_mode == "METRIC"
+    top_metric = ctx.rag_metrics[0]
+    assert top_metric.metric_type == "electricity_consumption"
+    assert top_metric.value == 48750.0
+    assert top_metric.unit == "kWh"
+
+
+def test_36_structured_metric_retrieval_emissions_identity():
+    """36. Verify Scope 1, Scope 2, and Total GHG metrics retain exact identities and values for document 1."""
+    from backend.app.database.session import SessionLocal
+    from backend.app.services.copilot_rag import copilot_hybrid_retriever
+
+    db = SessionLocal()
+    ctx = copilot_hybrid_retriever.retrieve(db, "How can I reduce my carbon emission?", document_id=1)
+
+    m_map = {m.metric_type: m.value for m in ctx.rag_metrics}
+
+    assert m_map["scope_1_emissions"] == 1.13
+    assert m_map["scope_2_emissions"] == 31.88
+    assert m_map["total_ghg_emissions"] == 33.01
+
+
+def test_37_hybrid_context_reduction_query():
+    """37. Verify reduction query retrieves hybrid context (chunks, metrics, evidence, recommendations)."""
+    from backend.app.database.session import SessionLocal
+    from backend.app.services.copilot_rag import copilot_hybrid_retriever
+
+    db = SessionLocal()
+    ctx = copilot_hybrid_retriever.retrieve(db, "How can I reduce my carbon emission?", document_id=1)
+
+    assert ctx.retrieval_mode == "EMISSIONS"
+    assert len(ctx.rag_metrics) >= 3
+    assert len(ctx.chunks) > 0
+    assert len(ctx.sources) > 0
+    assert len(ctx.recommendations) > 0
+
+
+def test_38_document_scoped_hybrid_retrieval():
+    """38. Verify document_id filtering prevents cross-document leakage in hybrid retrieval."""
+    from backend.app.database.session import SessionLocal
+    from backend.app.services.copilot_rag import copilot_hybrid_retriever
+
+    db = SessionLocal()
+    ctx = copilot_hybrid_retriever.retrieve(db, "electricity", document_id=1)
+
+    assert ctx.document_id == 1
+    assert all(c.document_id == 1 for c in ctx.chunks)
+    assert all(m.document_id == 1 for m in ctx.rag_metrics)
+    assert all(s.document_id == 1 for s in ctx.sources)
+
+
+def test_39_database_read_only_safety():
+    """39. Verify hybrid retrieval does not perform write operations or alter database state."""
+    from backend.app.database.session import SessionLocal
+    from backend.app.models.document import Document
+    from backend.app.services.copilot_rag import copilot_hybrid_retriever
+
+    db = SessionLocal()
+    initial_count = db.query(Document).count()
+
+    copilot_hybrid_retriever.retrieve(db, "What is the peak demand?", document_id=1)
+
+    final_count = db.query(Document).count()
+    assert initial_count == final_count
+
+
+def test_40_no_metric_label_swapping():
+    """40. Verify explicit RAGMetric objects prevent label swapping."""
+    from backend.app.database.session import SessionLocal
+    from backend.app.services.copilot_rag import copilot_hybrid_retriever
+
+    db = SessionLocal()
+    ctx = copilot_hybrid_retriever.retrieve(db, "emissions summary", document_id=1)
+
+    s1 = next((m for m in ctx.rag_metrics if m.metric_type == "scope_1_emissions"), None)
+    s2 = next((m for m in ctx.rag_metrics if m.metric_type == "scope_2_emissions"), None)
+
+    assert s1 is not None and s1.value == 1.13
+    assert s2 is not None and s2.value == 31.88
+    assert s1.metric_name == "Scope 1 Emissions"
+    assert s2.metric_name == "Scope 2 Emissions"
+
