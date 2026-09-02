@@ -14,6 +14,13 @@ PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+# Ensure backend venv site-packages are on sys.path if running under system python
+import glob
+venv_sites = glob.glob(str(Path(__file__).resolve().parent.parent / "venv" / "lib" / "python*" / "site-packages"))
+for venv_site in venv_sites:
+    if venv_site not in sys.path:
+        sys.path.insert(0, venv_site)
+
 # Load environment variables
 load_dotenv()
 
@@ -31,7 +38,8 @@ logger = logging.getLogger("senseible-document-ai")
 async def lifespan(app: FastAPI):
     logger.info("Initializing SQLite database tables...")
     init_db()
-    upload_dir = os.getenv("UPLOAD_DIR", "uploads")
+    default_upload_dir = str(Path(__file__).resolve().parent.parent / "uploads")
+    upload_dir = os.getenv("UPLOAD_DIR", default_upload_dir)
     os.makedirs(upload_dir, exist_ok=True)
     logger.info(f"Senseible Document AI Backend started successfully. Upload directory: {upload_dir}")
     yield
@@ -54,7 +62,8 @@ app.add_middleware(
 )
 
 # Mount uploads directory for static file access
-upload_dir = os.getenv("UPLOAD_DIR", "uploads")
+default_upload_dir = str(Path(__file__).resolve().parent.parent / "uploads")
+upload_dir = os.getenv("UPLOAD_DIR", default_upload_dir)
 os.makedirs(upload_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=upload_dir), name="uploads")
 

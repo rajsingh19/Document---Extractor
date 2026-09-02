@@ -2,12 +2,16 @@ import os
 import shutil
 import json
 import hashlib
+import logging
+from pathlib import Path
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, or_, func
+
+logger = logging.getLogger("senseible-document-ai")
 
 from backend.app.database.session import get_db
 from backend.app.models.document import Document
@@ -50,7 +54,9 @@ pipeline_service = ExtractionPipelineService()
 llm_service = LLMService()
 normalization_service = NormalizationService()
 
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+DEFAULT_UPLOAD_DIR = str(BACKEND_DIR / "uploads")
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", DEFAULT_UPLOAD_DIR)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB max limit
@@ -141,27 +147,50 @@ async def upload_document(
         with open(file_path, "wb") as buffer:
             buffer.write(file_bytes)
     except Exception as e:
+        logger.exception(f"Failed to save uploaded file to {file_path}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to save file on storage volume."
         )
 
-    doc = Document(
-        filename=unique_filename,
-        original_filename=safe_name,
-        file_path=file_path,
-        file_size=file_size,
-        file_hash=file_hash,
-        mime_type="application/pdf",
-        status="PENDING",
-        review_status="NEEDS_REVIEW"
-    )
-    db.add(doc)
-    db.commit()
-    db.refresh(doc)
+    try:
+        doc = Document(
+            filename=unique_filename,
+            original_filename=safe_name,
+            file_path=file_path,
+            file_size=file_size,
+            file_hash=file_hash,
+            mime_type="application/pdf",
+            status="PENDING",
+            review_status="NEEDS_REVIEW"
+        )
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+    except Exception as db_err:
+        db.rollback()
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+        logger.exception(f"Database error while saving initial document record: {db_err}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error while saving uploaded document."
+        )
 
     if auto_process:
-        doc = pipeline_service.process_document(db, doc.id, force_ocr=force_ocr)
+        try:
+            doc = pipeline_service.process_document(db, doc.id, force_ocr=force_ocr)
+        except Exception as proc_err:
+            logger.exception(f"Extraction pipeline failed for document ID {doc.id}: {proc_err}")
+            try:
+                failed_doc = db.query(Document).filter(Document.id == doc.id).first()
+                if failed_doc:
+                    doc = failed_doc
+            except Exception:
+                db.rollback()
 
     return doc
 

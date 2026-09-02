@@ -210,9 +210,14 @@ class NormalizationService:
             db.add(metric_record)
             created_metrics.append(metric_record)
 
-        db.commit()
-        for m in created_metrics:
-            db.refresh(m)
+        try:
+            db.commit()
+            for m in created_metrics:
+                db.refresh(m)
+        except Exception as norm_commit_err:
+            db.rollback()
+            logger.exception(f"Failed to commit normalized metrics for Document ID {document.id}: {norm_commit_err}")
+            raise
 
         logger.info(f"Normalized {len(created_metrics)} metrics for Document ID {document.id} ({company_name})")
         return created_metrics

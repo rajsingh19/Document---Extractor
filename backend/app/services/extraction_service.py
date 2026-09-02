@@ -181,9 +181,17 @@ class ExtractionPipelineService:
             return doc
 
         except Exception as err:
-            logger.exception(f"Pipeline error for document ID {doc.id}: {err}")
-            doc.status = "FAILED"
-            doc.error_message = str(err)
-            db.commit()
-            db.refresh(doc)
-            return doc
+            logger.exception(f"Pipeline error for document ID {document_id}: {err}")
+            try:
+                db.rollback()
+                failed_doc = db.query(Document).filter(Document.id == document_id).first()
+                if failed_doc:
+                    failed_doc.status = "FAILED"
+                    failed_doc.error_message = str(err)
+                    db.commit()
+                    db.refresh(failed_doc)
+                    return failed_doc
+            except Exception as rollback_err:
+                logger.exception(f"Failed to record FAILED status for document {document_id}: {rollback_err}")
+                db.rollback()
+            raise

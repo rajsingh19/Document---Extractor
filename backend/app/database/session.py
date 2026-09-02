@@ -3,13 +3,22 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from backend.app.database.base import Base
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./senseible_documents.db")
+from pathlib import Path
+from sqlalchemy.pool import NullPool
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
-    echo=False
-)
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+DEFAULT_DB_PATH = BACKEND_DIR / "senseible_documents.db"
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
+
+engine_kwargs = {"echo": False}
+if DATABASE_URL.startswith("sqlite"):
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+    engine_kwargs["poolclass"] = NullPool
+else:
+    engine_kwargs["pool_size"] = 20
+    engine_kwargs["max_overflow"] = 40
+
+engine = create_engine(DATABASE_URL, **engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
