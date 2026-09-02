@@ -709,12 +709,27 @@ class LLMService:
         scope_1_tco2e = None
         s1_vals = []
         s1_sources = []
-        s1_pat = r"(?:scope 1 - diesel|fuel diesel scope 1|scope 1 direct ghg emissions|scope 1 direct emissions|scope 1 direct|scope 1)[^\d\n\r]*?(?:\n[^\n]*){0,3}\n[ \t]*([\d,]+(?:\.\d+)?)\s*tco2e"
-        for s1_m in re.finditer(s1_pat, text, re.IGNORECASE):
-            s1_val = parse_indian_number(s1_m.group(1))
-            if s1_val is not None and s1_val not in s1_vals:
-                s1_vals.append(s1_val)
-                s1_sources.append(s1_m.group(0).replace('\n', ' ').strip())
+
+        # Same-line match first (horizontal table layout)
+        for line in text.splitlines():
+            line_str = line.strip()
+            if not line_str or re.search(r'\btotal\b|\bconsolidated\b|scope\s*1\s*\+\s*scope\s*2', line_str, re.IGNORECASE):
+                continue
+            m = re.search(r'(?:scope 1 - diesel|fuel diesel scope 1|scope 1 direct ghg emissions|scope 1 direct emissions|scope 1 direct|scope 1)[^\n\r]*?\b([\d,]+(?:\.\d+)?)\s*tco2e', line_str, re.IGNORECASE)
+            if m:
+                s1_val = parse_indian_number(m.group(1))
+                if s1_val is not None and s1_val not in s1_vals:
+                    s1_vals.append(s1_val)
+                    s1_sources.append(m.group(0).strip())
+
+        # Vertical format (bounded so it never crosses into Scope 2 or Total GHG lines)
+        if not s1_vals:
+            s1_vert_pat = r'(?:scope 1 - diesel|fuel diesel scope 1|scope 1 direct ghg emissions|scope 1 direct emissions|scope 1 direct|scope 1)[^\d\n\r]*?(?:\n(?!scope\s*[12]\s*(?:direct|indirect|-|ghg)|total|net)[^\n]*)*?\n[ \t]*([\d,]+(?:\.\d+)?)[ \t]*(?:tco2e|\n[ \t]*tco2e)'
+            for m in re.finditer(s1_vert_pat, text, re.IGNORECASE):
+                s1_val = parse_indian_number(m.group(1))
+                if s1_val is not None and s1_val not in s1_vals:
+                    s1_vals.append(s1_val)
+                    s1_sources.append(m.group(0).replace('\n', ' ').strip())
 
         if not s1_vals:
             for pat in [
@@ -744,55 +759,94 @@ class LLMService:
             })
 
         scope_2_tco2e = None
-        s2_pats = [
-            r"(?:scope 2 - grid|scope 2 indirect purchased electricity|scope 2 indirect ghg emissions|scope 2 indirect|scope 2)[^\d\n\r]*?(?:\n[^\n]*){0,3}\n[ \t]*([\d,]+(?:\.\d+)?)[ \t\n]*tco2e",
-            r"(?:scope 2 - grid|scope 2 indirect purchased electricity|scope 2 indirect ghg emissions|scope 2 indirect|scope 2)[^\d\n\r]*?([\d,]+(?:\.\d+)?)[ \t\n]*tco2e",
-            r"(?:purchased electricity)[^\d\n\r]*?\([^\)]*\)\s*([\d,]+(?:\.\d+)?)[ \t\n]*tco2e",
-            r"([\d,]+(?:\.\d+)?)[ \t\n]*tco2e[^\n]*?(?:scope 2)"
-        ]
-        for pat in s2_pats:
-            s2_m = re.search(pat, text, re.IGNORECASE)
-            if s2_m:
-                s2_val = parse_indian_number(s2_m.group(1))
+        s2_sources = []
+        # Same-line match first
+        for line in text.splitlines():
+            line_str = line.strip()
+            if not line_str or re.search(r'\btotal\b|\bconsolidated\b', line_str, re.IGNORECASE):
+                continue
+            m = re.search(r'(?:scope 2 - grid|scope 2 indirect purchased electricity|scope 2 indirect ghg emissions|scope 2 indirect|scope 2|purchased electricity)[^\n\r]*?\b([\d,]+(?:\.\d+)?)\s*tco2e', line_str, re.IGNORECASE)
+            if m:
+                s2_val = parse_indian_number(m.group(1))
                 if s2_val is not None:
                     scope_2_tco2e = s2_val
-                    conf = 0.98 if extraction_method == "pymupdf" else 0.80
-                    evidence_list.append({
-                        "field": "scope_2_indirect_tco2e",
-                        "value": scope_2_tco2e,
-                        "unit": "tCO2e",
-                        "confidence": conf,
-                        "confidence_level": "HIGH" if conf >= 0.9 else "MEDIUM",
-                        "source_text": s2_m.group(0).replace('\n', ' ').strip(),
-                        "is_verified": False,
-                        "human_corrected_value": None
-                    })
+                    s2_sources.append(m.group(0).strip())
                     break
 
+        # Vertical format (bounded so it never crosses Scope 1 or Total GHG)
+        if scope_2_tco2e is None:
+            s2_vert_pat = r'(?:scope 2 - grid|scope 2 indirect purchased electricity|scope 2 indirect ghg emissions|scope 2 indirect|scope 2)[^\d\n\r]*?(?:\n(?!scope\s*[12]\s*(?:direct|indirect|-|ghg)|total|net)[^\n]*)*?\n[ \t]*([\d,]+(?:\.\d+)?)[ \t]*(?:tco2e|\n[ \t]*tco2e)'
+            m = re.search(s2_vert_pat, text, re.IGNORECASE)
+            if m:
+                s2_val = parse_indian_number(m.group(1))
+                if s2_val is not None:
+                    scope_2_tco2e = s2_val
+                    s2_sources.append(m.group(0).replace('\n', ' ').strip())
+
+        if scope_2_tco2e is None:
+            s2_pats = [
+                r"(?:purchased electricity)[^\d\n\r]*?\([^\)]*\)\s*([\d,]+(?:\.\d+)?)[ \t\n]*tco2e",
+                r"([\d,]+(?:\.\d+)?)[ \t\n]*tco2e[^\n]*?(?:scope 2)"
+            ]
+            for pat in s2_pats:
+                s2_m = re.search(pat, text, re.IGNORECASE)
+                if s2_m:
+                    s2_val = parse_indian_number(s2_m.group(1))
+                    if s2_val is not None:
+                        scope_2_tco2e = s2_val
+                        s2_sources.append(s2_m.group(0).replace('\n', ' ').strip())
+                        break
+
+        if scope_2_tco2e is not None:
+            conf = 0.98 if extraction_method == "pymupdf" else 0.80
+            evidence_list.append({
+                "field": "scope_2_indirect_tco2e",
+                "value": scope_2_tco2e,
+                "unit": "tCO2e",
+                "confidence": conf,
+                "confidence_level": "HIGH" if conf >= 0.9 else "MEDIUM",
+                "source_text": "; ".join(s2_sources) if s2_sources else f"Scope 2: {scope_2_tco2e} tCO2e",
+                "is_verified": False,
+                "human_corrected_value": None
+            })
+
         total_ghg_tco2e = None
-        tot_ghg_pats = [
-            r"(?:consolidated scope 1 \+ scope 2|total operational ghg footprint|total operational ghg|net total carbon footprint|total carbon footprint|total ghg emissions)[^\n\r]*?\b([\d,]+(?:\.\d+)?)[ \t\n]*tco2e",
-            r"(?:consolidated scope 1 \+ scope 2|total operational ghg footprint|total operational ghg|net total carbon footprint|total carbon footprint|total ghg emissions)[^\d\n\r]*?(?:\n[^\n]*){0,3}\n[ \t]*([\d,]+(?:\.\d+)?)[ \t\n]*tco2e",
-            r"(?:consolidated scope 1 \+ scope 2|total operational ghg footprint|total operational ghg|net total carbon footprint|total carbon footprint|total ghg emissions)[^\d\n\r]*?([\d,]+(?:\.\d+)?)[ \t\n]*tco2e"
-        ]
-        for pat in tot_ghg_pats:
-            tot_ghg_m = re.search(pat, text, re.IGNORECASE)
-            if tot_ghg_m:
-                tot_val = parse_indian_number(tot_ghg_m.group(1))
+        tot_sources = []
+        # Same-line match first
+        for line in text.splitlines():
+            line_str = line.strip()
+            if not line_str:
+                continue
+            m = re.search(r'(?:total operational ghg|total operational ghg footprint|net total carbon footprint|total carbon footprint|total ghg emissions)[^\n\r]*?\b([\d,]+(?:\.\d+)?)\s*tco2e', line_str, re.IGNORECASE)
+            if m:
+                tot_val = parse_indian_number(m.group(1))
                 if tot_val is not None:
                     total_ghg_tco2e = tot_val
-                    conf = 0.98 if extraction_method == "pymupdf" else 0.80
-                    evidence_list.append({
-                        "field": "total_ghg_emissions_tco2e",
-                        "value": total_ghg_tco2e,
-                        "unit": "tCO2e",
-                        "confidence": conf,
-                        "confidence_level": "HIGH" if conf >= 0.9 else "MEDIUM",
-                        "source_text": tot_ghg_m.group(0).replace('\n', ' ').strip(),
-                        "is_verified": False,
-                        "human_corrected_value": None
-                    })
+                    tot_sources.append(m.group(0).strip())
                     break
+
+        # Vertical format
+        if total_ghg_tco2e is None:
+            tot_vert_pat = r'(?:total operational ghg|total operational ghg footprint|net total carbon footprint|total carbon footprint|total ghg emissions)[^\d\n\r]*?(?:\n(?!scope\s*[12]\s*(?:direct|indirect|-|ghg))[^\n]*)*?\n[ \t]*([\d,]+(?:\.\d+)?)[ \t]*(?:tco2e|\n[ \t]*tco2e)'
+            m = re.search(tot_vert_pat, text, re.IGNORECASE)
+            if m:
+                tot_val = parse_indian_number(m.group(1))
+                if tot_val is not None:
+                    total_ghg_tco2e = tot_val
+                    tot_sources.append(m.group(0).replace('\n', ' ').strip())
+
+        if total_ghg_tco2e is not None:
+            conf = 0.98 if extraction_method == "pymupdf" else 0.80
+            evidence_list.append({
+                "field": "total_ghg_emissions_tco2e",
+                "value": total_ghg_tco2e,
+                "unit": "tCO2e",
+                "confidence": conf,
+                "confidence_level": "HIGH" if conf >= 0.9 else "MEDIUM",
+                "source_text": "; ".join(tot_sources) if tot_sources else f"Total GHG: {total_ghg_tco2e} tCO2e",
+                "is_verified": False,
+                "human_corrected_value": None
+            })
 
         if total_ghg_tco2e is None and scope_1_tco2e is not None and scope_2_tco2e is not None:
             total_ghg_tco2e = round(scope_1_tco2e + scope_2_tco2e, 2)

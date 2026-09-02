@@ -123,10 +123,20 @@ export const getInsights = async (params = {}) => {
   return response.data;
 };
 
-export const askCopilot = async (message, history = []) => {
-  const response = await api.post('/copilot/chat', { message, history });
+export const askCopilot = async (message, history = [], documentId = null) => {
+  const payload = { message, history };
+  if (documentId) {
+    payload.document_id = documentId;
+  }
+  const response = await api.post('/copilot/chat', payload);
+  return response.data;
+};
+
+export const getAttentionItems = async () => {
+  const response = await api.get('/copilot/attention');
   return response.data;
 };
 
 export default api;
+
 

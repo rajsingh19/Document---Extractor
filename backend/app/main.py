@@ -6,6 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
+import sys
+from pathlib import Path
+
+# Ensure project root is on sys.path so 'backend.app...' absolute imports resolve
+PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 # Load environment variables
 load_dotenv()
 

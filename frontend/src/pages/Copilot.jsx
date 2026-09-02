@@ -5,7 +5,7 @@ import ChatInput from '../components/copilot/ChatInput';
 import SuggestedQuestions from '../components/copilot/SuggestedQuestions';
 import { askCopilot } from '../services/api';
 
-export default function Copilot({ onNavigate, onSelectDocument }) {
+export default function Copilot({ onNavigate, onSelectDocument, attentionData, onRefreshAttention }) {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
@@ -37,9 +37,14 @@ export default function Copilot({ onNavigate, onSelectDocument }) {
           content: response.answer || 'No response received from Copilot.',
           intent: response.intent || null,
           sources: response.sources || [],
-          actions: response.actions || []
+          actions: response.actions || [],
+          recommendations: response.recommendations || []
         }
       ]);
+      // Refresh attention state on message completion
+      if (onRefreshAttention) {
+        onRefreshAttention();
+      }
     } catch (err) {
       console.error('Copilot request error:', err);
       setLastFailedMessage(question);
@@ -59,6 +64,9 @@ export default function Copilot({ onNavigate, onSelectDocument }) {
     setMessages([]);
     setErrorMessage(null);
     setLastFailedMessage(null);
+    if (onRefreshAttention) {
+      onRefreshAttention();
+    }
   };
 
   const handleSelectSource = (docId) => {
@@ -106,15 +114,17 @@ export default function Copilot({ onNavigate, onSelectDocument }) {
         messageCount={messages.length}
       />
 
-      {/* 2. MAIN CHAT WINDOW */}
+      {/* 2. MAIN CHAT WINDOW (PROACTIVE ATTENTION LANDING + CHAT STREAM) */}
       <ChatWindow
         messages={messages}
         isLoading={isLoading}
         errorMessage={errorMessage}
+        attentionData={attentionData}
         onRetry={handleRetry}
         onSelectQuestion={handleSendMessage}
         onSelectAction={handleSelectAction}
         onSelectSource={handleSelectSource}
+        onUploadClick={() => onNavigate && onNavigate('documents')}
       />
 
       {/* 3. SUGGESTED QUESTIONS (SHOWN ONCE CONVERSATION ACTIVE) */}

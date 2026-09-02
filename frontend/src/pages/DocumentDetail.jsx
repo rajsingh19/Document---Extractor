@@ -9,11 +9,13 @@ import {
   ChevronDown,
   ChevronUp,
   History,
-  Download
+  Download,
+  Sparkles
 } from 'lucide-react';
 import ExtractionTable from '../components/ExtractionTable';
 import EvidenceSection from '../components/EvidenceSection';
 import QualitySummary from '../components/QualitySummary';
+import DocumentChatbot from '../components/copilot/DocumentChatbot';
 import { 
   verifyField, 
   correctField, 
@@ -34,6 +36,33 @@ export default function DocumentDetail({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showRawText, setShowRawText] = useState(false);
   const [showAuditTrail, setShowAuditTrail] = useState(false);
+  const [showChatbot, setShowChatbot] = useState(false);
+
+  const handleExportJson = () => {
+    try {
+      const exportData = {
+        id: doc.id,
+        filename: doc.original_filename || doc.filename,
+        company_name: doc.company_name,
+        document_type: doc.document_type,
+        reporting_period: doc.reporting_period,
+        quality_score: doc.quality_score,
+        review_status: doc.review_status,
+        structured_data: doc.structured_data,
+        exported_at: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const safeComp = (doc.company_name || 'document').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      a.download = `${safeComp}_${doc.id}_extracted.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+  };
 
   useEffect(() => {
     setDoc(initialDoc);
@@ -186,9 +215,9 @@ export default function DocumentDetail({
       <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
               <h2 className="text-base font-bold text-slate-900">
-                {doc.original_filename || doc.filename}
+                {doc.document_type || 'Document'} &mdash; {doc.company_name || doc.original_filename || doc.filename}
               </h2>
               {isVerified ? (
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -206,18 +235,41 @@ export default function DocumentDetail({
             </div>
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-1">
-              <span><b>Type:</b> {doc.document_type || 'Unknown / Other'}</span>
+              <span>{doc.original_filename || doc.filename}</span>
               <span>&bull;</span>
-              <span><b>Company:</b> {doc.company_name || 'Not identified'}</span>
+              <span><b>Type:</b> {doc.document_type || 'Unknown / Other'}</span>
               <span>&bull;</span>
               <span><b>Reporting Period:</b> {doc.reporting_period || '—'}</span>
             </div>
           </div>
 
-          <div className="text-left sm:text-right shrink-0">
-            <span className="text-xs text-slate-400 block font-normal">Extraction Quality</span>
-            <span className="text-xl font-bold text-slate-900">{score}</span>
-            <span className="text-xs text-slate-400 font-normal ml-1">/ 100</span>
+          <div className="flex flex-col sm:items-end gap-3 shrink-0">
+            <div className="text-left sm:text-right">
+              <span className="text-xs text-slate-400 block font-normal">Extraction Quality</span>
+              <span className="text-xl font-bold text-slate-900">{score}</span>
+              <span className="text-xs text-slate-400 font-normal ml-1">/ 100</span>
+            </div>
+
+            {/* Contextual Action Buttons: [Export JSON] [Ask AI] */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handleExportJson}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded text-xs font-medium transition-colors shadow-2xs"
+                title="Export extracted document data as JSON"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-400" />
+                <span>Export JSON</span>
+              </button>
+
+              <button
+                onClick={() => setShowChatbot(true)}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-emerald-50 text-[#0f6b56] border border-[#0f6b56]/40 hover:border-[#0f6b56] rounded text-xs font-semibold transition-colors shadow-2xs"
+                title="Ask AI about this document"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-[#0f6b56]" />
+                <span>Ask AI</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -327,6 +379,14 @@ export default function DocumentDetail({
           </div>
         )}
       </div>
+
+      {/* Contextual Document Chatbot Drawer */}
+      {showChatbot && (
+        <DocumentChatbot
+          document={doc}
+          onClose={() => setShowChatbot(false)}
+        />
+      )}
 
     </div>
   );

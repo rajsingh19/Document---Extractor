@@ -23,7 +23,12 @@ from backend.app.schemas.document import (
     ReviewStatusRequest,
     ClassificationUpdateRequest
 )
-from backend.app.schemas.copilot import CopilotRequest, CopilotResponse, CopilotContext
+from backend.app.schemas.copilot import (
+    CopilotRequest,
+    CopilotResponse,
+    CopilotContext,
+    AttentionResponse
+)
 from backend.app.services.extraction_service import ExtractionPipelineService
 from backend.app.services.ocr_service import OCRService
 from backend.app.services.llm_service import LLMService
@@ -31,6 +36,7 @@ from backend.app.services.normalization_service import NormalizationService
 from backend.app.services.insights_service import insights_service
 from backend.app.services.copilot_service import copilot_service
 from backend.app.services.copilot_context import copilot_context_service
+from backend.app.services.copilot_attention import copilot_attention_service
 from backend.app.utils.helpers import generate_unique_filename, parse_period_key
 from backend.app.utils.sample_generator import (
     generate_sample_electricity_bill,
@@ -981,7 +987,7 @@ def copilot_chat(
                 detail="Message exceeds maximum allowed length of 2000 characters."
             )
         
-        response = copilot_service.chat(db, cleaned_msg, history=request.history)
+        response = copilot_service.chat(db, cleaned_msg, history=request.history, document_id=request.document_id)
         return response
     except HTTPException:
         raise
@@ -1003,4 +1009,16 @@ def get_copilot_context(
     for a given query across documents, metrics, evidence, and deterministic insights.
     """
     return copilot_context_service.build_context(db, query)
+
+
+@router.get("/copilot/attention", response_model=AttentionResponse)
+def get_copilot_attention(
+    db: Session = Depends(get_db)
+):
+    """
+    Senseible AI Copilot Proactive Attention Engine (Step 11D).
+    Returns prioritized, deduplicated operational attention items and category counts.
+    """
+    return copilot_attention_service.get_attention_items(db)
+
 

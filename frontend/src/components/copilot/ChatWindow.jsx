@@ -2,15 +2,19 @@ import React, { useRef, useEffect } from 'react';
 import { Sparkles, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
 import ChatMessage from './ChatMessage';
 import SuggestedQuestions from './SuggestedQuestions';
+import AttentionCards from './AttentionCards';
 
 export default function ChatWindow({
   messages = [],
   isLoading = false,
   errorMessage = null,
+  attentionData = null,
+  isLoadingAttention = false,
   onRetry,
   onSelectQuestion,
   onSelectAction,
-  onSelectSource
+  onSelectSource,
+  onUploadClick
 }) {
   const bottomRef = useRef(null);
 
@@ -21,23 +25,22 @@ export default function ChatWindow({
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex-1 bg-slate-50/50 rounded-lg border border-slate-200 p-4 sm:p-6 overflow-y-auto min-h-[380px] max-h-[600px] flex flex-col justify-between">
+    <div className="flex-1 bg-slate-50/50 rounded-lg border border-slate-200 p-4 sm:p-6 overflow-y-auto min-h-[380px] max-h-[600px] flex flex-col justify-between space-y-4">
       
       {isEmpty ? (
-        /* Empty State */
-        <div className="my-auto max-w-lg mx-auto text-center py-8 space-y-6">
-          <div className="w-10 h-10 rounded-lg bg-emerald-50 text-[#0f6b56] border border-emerald-200 flex items-center justify-center mx-auto shadow-2xs">
-            <Sparkles className="w-5 h-5" />
-          </div>
+        /* Proactive Landing State */
+        <div className="w-full space-y-5">
+          {/* 1. Proactive Attention Cards */}
+          <AttentionCards
+            attentionData={attentionData}
+            isLoading={isLoadingAttention}
+            onSelectAction={onSelectAction}
+            onSelectSource={onSelectSource}
+            onUploadClick={onUploadClick}
+          />
 
-          <div className="space-y-1.5">
-            <h2 className="text-base font-bold text-slate-900">AI Copilot</h2>
-            <p className="text-xs text-slate-500 leading-relaxed max-w-sm mx-auto">
-              Ask questions about your documents, metrics, and sustainability data.
-            </p>
-          </div>
-
-          <div className="pt-2 text-left">
+          {/* 2. Suggested Prompts */}
+          <div className="pt-2">
             <SuggestedQuestions onSelectQuestion={onSelectQuestion} disabled={isLoading} />
           </div>
         </div>

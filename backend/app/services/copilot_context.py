@@ -56,10 +56,18 @@ def classify_intent(query: str, history: Optional[List[Dict[str, str]]] = None) 
         return "MISSING_DATA"
 
     # 3. ACTION_RECOMMENDATION: Steps to reduce emissions or improve sustainability
-    if any(k in q for k in [
+    reduction_verbs = ["reduce", "reduction", "lower", "lowering", "decrease", "decreasing", "cut", "cutting", "minimize", "minimizing", "mitigate"]
+    emissions_terms = ["emission", "emissions", "carbon", "footprint", "ghg", "scope 1", "scope 2", "scope1", "scope2"]
+    has_reduction_action = any(v in q for v in reduction_verbs) and any(e in q for e in emissions_terms)
+
+    if has_reduction_action or any(k in q for k in [
         "how can we reduce", "how can i reduce", "reduce emission", "reduce emissions", 
-        "how to reduce", "recommendation", "recommendations", "how to improve", 
-        "what actions", "action recommendation", "next steps"
+        "how to reduce", "can we reduce", "can i reduce", "recommendation", "recommendations", "how to improve", 
+        "what actions", "action recommendation", "next steps", "focus on first", "focus first",
+        "what should i focus", "what to focus", "where should i focus", "where should we focus", "where to focus",
+        "what can i do", "what can we do", "what should i do",
+        "biggest opportunity", "biggest sustainability opportunity",
+        "opportunity", "opportunities", "where is our biggest"
     ]):
         return "ACTION_RECOMMENDATION"
 
@@ -155,14 +163,15 @@ class CopilotContextService:
         self,
         db: Session,
         query: str,
-        history: Optional[List[Dict[str, str]]] = None
+        history: Optional[List[Dict[str, str]]] = None,
+        document_id: Optional[int] = None
     ) -> CopilotContext:
         """
         Build compact, intent-aware grounded context object from real Senseible data.
+        If document_id is provided, scopes all context strictly to that document.
         """
         intent = classify_intent(query, history=history)
         summary = self.build_summary(db)
-
 
         docs_ctx: List[DocumentContext] = []
         metrics_ctx: List[MetricContext] = []
@@ -174,6 +183,14 @@ class CopilotContextService:
         all_docs = db.query(Document).order_by(desc(Document.created_at)).all()
         all_metrics = db.query(SustainabilityMetric).order_by(desc(SustainabilityMetric.created_at)).all()
         all_insights = insights_service.generate_metric_insights(db)
+
+        target_doc = None
+        if document_id is not None:
+            target_doc = db.query(Document).filter(Document.id == document_id).first()
+            if target_doc:
+                all_docs = [target_doc]
+                all_metrics = db.query(SustainabilityMetric).filter(SustainabilityMetric.document_id == document_id).order_by(desc(SustainabilityMetric.created_at)).all()
+                all_insights = [i for i in all_insights if i.source_document_id == document_id]
 
         # 1. Intent: DOCUMENT_REVIEW / What needs attention
         if intent == "DOCUMENT_REVIEW":
@@ -350,6 +367,25 @@ class CopilotContextService:
                     source_document_id=m.document_id
                 ))
 
+            # Include relevant documents and sources for recommendations
+            rel_doc_ids = {m.document_id for m in all_metrics[:MAX_METRICS] if m.document_id}
+            rel_docs = [d for d in all_docs if d.id in rel_doc_ids][:MAX_DOCUMENTS]
+            if not rel_docs and all_docs:
+                rel_docs = all_docs[:MAX_DOCUMENTS]
+
+            for d in rel_docs:
+                docs_ctx.append(DocumentContext(
+                    document_id=d.id,
+                    filename=d.original_filename or d.filename,
+                    document_type=d.document_type,
+                    company_name=d.company_name,
+                    reporting_period=d.reporting_period,
+                    status=d.status,
+                    quality_score=float(d.quality_score or 0.0),
+                    verification_status=d.review_status or "READY"
+                ))
+            sources_ctx = self.extract_sources_from_documents(rel_docs, limit=MAX_SOURCES)
+
         # 6. Intent: METRIC_QUERY
         elif intent == "METRIC_QUERY":
             q_lower = query.lower()
@@ -420,6 +456,21 @@ class CopilotContextService:
                     quality_score=float(d.quality_score or 0.0),
                     verification_status=d.review_status or "READY"
                 ))
+
+        if document_id is not None and target_doc:
+            if not any(d.document_id == target_doc.id for d in docs_ctx):
+                docs_ctx.insert(0, DocumentContext(
+                    document_id=target_doc.id,
+                    filename=target_doc.original_filename or target_doc.filename,
+                    document_type=target_doc.document_type,
+                    company_name=target_doc.company_name,
+                    reporting_period=target_doc.reporting_period,
+                    status=target_doc.status,
+                    quality_score=float(target_doc.quality_score or 0.0),
+                    verification_status=target_doc.review_status or "READY"
+                ))
+            if not sources_ctx:
+                sources_ctx = self.extract_sources_from_documents([target_doc], limit=MAX_SOURCES)
 
         return CopilotContext(
             intent=intent,

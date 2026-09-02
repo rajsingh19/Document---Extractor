@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, User, Sparkles, CheckCircle2, FileText, ArrowRight, ExternalLink } from 'lucide-react';
+import { Bot, User, Sparkles, CheckCircle2, FileText, ArrowRight, ExternalLink, Lightbulb, Target } from 'lucide-react';
 
 export default function ChatMessage({ message, onSelectAction, onSelectSource }) {
   const isUser = message.role === 'user';
@@ -30,6 +30,58 @@ export default function ChatMessage({ message, onSelectAction, onSelectSource })
         <div className="text-slate-800 leading-relaxed whitespace-pre-wrap">
           {message.content}
         </div>
+
+        {/* Structured Recommended Actions (Step 11E) */}
+        {message.recommendations && message.recommendations.length > 0 && (
+          <div className="pt-2 border-t border-slate-100 space-y-2.5">
+            <div className="flex items-center space-x-1.5 text-slate-700 font-semibold text-[11px]">
+              <Target className="w-3.5 h-3.5 text-[#0f6b56]" />
+              <span>Recommended Actions:</span>
+            </div>
+
+            <div className="space-y-2">
+              {message.recommendations.slice(0, 3).map((rec, i) => (
+                <div
+                  key={rec.id || i}
+                  className="bg-slate-50 border border-slate-200 rounded-md p-3 text-xs space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900">{rec.title}</span>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-200 text-slate-700 uppercase">
+                      {rec.category}
+                    </span>
+                  </div>
+
+                  <div className="text-[11px] text-slate-600 space-y-1">
+                    <p><strong className="text-slate-700">Why:</strong> {rec.reason}</p>
+                    {rec.suggested_actions && rec.suggested_actions.length > 0 && (
+                      <div>
+                        <strong className="text-slate-700">Next steps:</strong>
+                        <ul className="list-disc list-inside text-slate-600 pl-1 mt-0.5 space-y-0.5">
+                          {rec.suggested_actions.slice(0, 2).map((act, aIdx) => (
+                            <li key={aIdx}>{act}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  {rec.source_document_id && onSelectSource && (
+                    <div className="pt-1 flex items-center justify-between border-t border-slate-200/60">
+                      <button
+                        onClick={() => onSelectSource(rec.source_document_id)}
+                        className="text-[10px] text-[#0f6b56] hover:underline font-medium inline-flex items-center space-x-1"
+                      >
+                        <FileText className="w-2.5 h-2.5" />
+                        <span>Source: Doc #{rec.source_document_id}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Verified Sources Chips */}
         {message.sources && message.sources.length > 0 && (

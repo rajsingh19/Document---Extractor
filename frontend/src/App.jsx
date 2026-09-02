@@ -3,16 +3,16 @@ import Navbar from './components/Navbar';
 import Documents from './pages/Documents';
 import DocumentDetail from './pages/DocumentDetail';
 import Metrics from './pages/Metrics';
-import Copilot from './pages/Copilot';
-import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument } from './services/api';
+import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument, getAttentionItems } from './services/api';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('documents'); // 'documents' | 'metrics' | 'copilot'
+  const [activeTab, setActiveTab] = useState('documents'); // 'documents' | 'metrics'
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [health, setHealth] = useState(null);
   const [stats, setStats] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [totalDocs, setTotalDocs] = useState(0);
+  const [attentionData, setAttentionData] = useState(null);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
@@ -21,10 +21,50 @@ export default function App() {
   const [isSeeding, setIsSeeding] = useState(false);
   const [loadingActionId, setLoadingActionId] = useState(null);
 
+  // Synchronize route based on URL pathname
+  const resolveRoute = useCallback(async (pathname) => {
+    const docMatch = pathname.match(/^\/documents\/(\d+)$/);
+    if (docMatch) {
+      const docId = parseInt(docMatch[1], 10);
+      setActiveTab('documents');
+      try {
+        const fullDoc = await getDocument(docId);
+        setSelectedDocument(fullDoc);
+      } catch (err) {
+        console.error('Failed to load document from URL:', err);
+      }
+      return;
+    }
+
+    if (pathname === '/metrics') {
+      setActiveTab('metrics');
+      setSelectedDocument(null);
+      return;
+    }
+
+    // Default fallback to /documents
+    setActiveTab('documents');
+    setSelectedDocument(null);
+    if (pathname === '/ai-copilot' || pathname === '/' || pathname === '') {
+      window.history.replaceState(null, '', '/documents');
+    }
+  }, []);
+
+  useEffect(() => {
+    resolveRoute(window.location.pathname);
+
+    const handlePopState = () => {
+      resolveRoute(window.location.pathname);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [resolveRoute]);
+
   const fetchAppData = useCallback(async () => {
     try {
       setIsRefreshing(true);
-      const [healthData, statsData, docsData] = await Promise.all([
+      const [healthData, statsData, docsData, attData] = await Promise.all([
         getHealth().catch(() => null),
         getStats().catch(() => null),
         getDocuments({
@@ -33,10 +73,12 @@ export default function App() {
           search: searchTerm || undefined,
           status: statusFilter || undefined,
         }).catch(() => ({ documents: [], total: 0 })),
+        getAttentionItems().catch(() => null),
       ]);
 
       if (healthData) setHealth(healthData);
       if (statsData) setStats(statsData);
+      if (attData) setAttentionData(attData);
       if (docsData) {
         setDocuments(docsData.documents || []);
         setTotalDocs(docsData.total || 0);
@@ -57,9 +99,16 @@ export default function App() {
     try {
       const fullDoc = await getDocument(doc.id);
       setSelectedDocument(fullDoc);
+      window.history.pushState(null, '', `/documents/${doc.id}`);
     } catch (err) {
       setSelectedDocument(doc);
+      window.history.pushState(null, '', `/documents/${doc.id}`);
     }
+  };
+
+  const handleBackFromDocument = () => {
+    setSelectedDocument(null);
+    window.history.pushState(null, '', '/documents');
   };
 
   const handleDocumentUpdated = (updatedDoc) => {
@@ -69,6 +118,7 @@ export default function App() {
 
   const handleDocumentDeleted = (deletedId) => {
     setSelectedDocument(null);
+    window.history.pushState(null, '', '/documents');
     fetchAppData();
   };
 
@@ -121,6 +171,7 @@ export default function App() {
   const handleNavTab = (tab) => {
     setSelectedDocument(null);
     setActiveTab(tab);
+    window.history.pushState(null, '', `/${tab}`);
   };
 
   return (
@@ -140,14 +191,9 @@ export default function App() {
         {selectedDocument ? (
           <DocumentDetail
             document={selectedDocument}
-            onBack={() => setSelectedDocument(null)}
+            onBack={handleBackFromDocument}
             onDocumentUpdated={handleDocumentUpdated}
             onDocumentDeleted={handleDocumentDeleted}
-          />
-        ) : activeTab === 'copilot' ? (
-          <Copilot
-            onNavigate={handleNavTab}
-            onSelectDocument={handleSelectDocument}
           />
         ) : activeTab === 'metrics' ? (
           <Metrics

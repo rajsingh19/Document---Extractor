@@ -67,10 +67,12 @@ The end-to-end user workflow follows a calm, deterministic pipeline:
 
 3. **Start the FastAPI backend server:**
    ```bash
-   uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+   # From inside the backend directory:
+   uvicorn app.main:app --host 0.0.0.0 --port 8005 --reload
    ```
-   Backend will be accessible at `http://localhost:8000`.
-   Interactive OpenAPI documentation is available at `http://localhost:8000/docs`.
+   Backend will be accessible at `http://localhost:8005`.
+   Interactive OpenAPI documentation is available at `http://localhost:8005/docs`.
+
 
 ---
 

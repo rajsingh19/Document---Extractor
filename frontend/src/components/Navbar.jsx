@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { FileText, BarChart3, Activity, X, CheckCircle2, ShieldCheck, Database, Cpu, Sparkles } from 'lucide-react';
 
-export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, isSeeding }) {
+export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, isSeeding, attentionCount = 0 }) {
   const [showStatusModal, setShowStatusModal] = useState(false);
 
   return (
@@ -51,18 +51,6 @@ export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, i
               >
                 <BarChart3 className="w-3.5 h-3.5 text-slate-500" />
                 <span>Metrics</span>
-              </button>
-
-              <button
-                onClick={() => onSelectTab('copilot')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                  activeTab === 'copilot'
-                    ? 'bg-slate-100 text-slate-900 font-semibold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5 text-slate-500" />
-                <span>AI Copilot</span>
               </button>
             </nav>
           </div>
