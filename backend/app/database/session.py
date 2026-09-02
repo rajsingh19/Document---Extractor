@@ -35,6 +35,7 @@ def init_db():
     from backend.app.models.document import Document  # noqa: F401
     from backend.app.models.audit import AuditLog  # noqa: F401
     from backend.app.models.sustainability_metric import SustainabilityMetric  # noqa: F401
+    from backend.app.models.emission_factor import EmissionFactor  # noqa: F401
     Base.metadata.create_all(bind=engine)
     
     # Auto-migration for SQLite columns added in Step 3
@@ -169,7 +170,12 @@ def init_db():
                     )
                     db_session.add(cost_m)
 
+            # 3. Seed demo emission factors registry (Step 12A)
+            from backend.app.services.emission_factor_service import emission_factor_service
+            emission_factor_service.seed_demo_factors(db_session)
+
             db_session.commit()
     except Exception as e:
         print(f"Data integrity and backfill notice: {e}")
+
 

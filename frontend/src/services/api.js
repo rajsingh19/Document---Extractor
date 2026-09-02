@@ -157,6 +157,21 @@ export const downloadEvidenceReportPDF = async (documentId, filename = null) => 
   window.URL.revokeObjectURL(url);
 };
 
+export const getEmissionFactors = async (params = {}) => {
+  const response = await api.get('/emission-factors', { params });
+  return response.data;
+};
+
+export const getEmissionFactor = async (factorId) => {
+  const response = await api.get(`/emission-factors/${factorId}`);
+  return response.data;
+};
+
+export const findEmissionFactorCandidates = async (params = {}) => {
+  const response = await api.get('/emission-factors/candidates', { params });
+  return response.data;
+};
+
 export default api;
 
 

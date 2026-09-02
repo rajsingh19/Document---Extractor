@@ -47,6 +47,18 @@ export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, i
                 <BarChart3 className="w-3.5 h-3.5" />
                 <span>Metrics</span>
               </button>
+
+              <button
+                onClick={() => onSelectTab('emission-factors')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'emission-factors'
+                    ? 'bg-[#EAF7F2] text-[#0F6B56]'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Database className="w-3.5 h-3.5" />
+                <span>Emission Factors</span>
+              </button>
             </nav>
           </div>
 

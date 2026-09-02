@@ -34,8 +34,14 @@ from backend.app.schemas.copilot import (
     AttentionResponse
 )
 from backend.app.schemas.report import ReportData
+from backend.app.schemas.emission_factor import (
+    EmissionFactorResponse,
+    EmissionFactorListResponse,
+    CandidateMatchResponse,
+)
 from backend.app.services.evidence_report import evidence_report_service
 from backend.app.services.report_pdf import report_pdf_renderer
+from backend.app.services.emission_factor_service import emission_factor_service
 from backend.app.services.extraction_service import ExtractionPipelineService
 from backend.app.services.ocr_service import OCRService
 from backend.app.services.llm_service import LLMService
@@ -938,6 +944,65 @@ def download_document_evidence_report_pdf(document_id: int, db: Session = Depend
     except Exception as e:
         logger.error(f"Error generating report PDF for doc {document_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate evidence report PDF")
+
+@router.get("/emission-factors", response_model=EmissionFactorListResponse)
+def list_emission_factors(
+    activity_type: Optional[str] = Query(None, description="Filter by activity type"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    geography: Optional[str] = Query(None, description="Filter by geography"),
+    year: Optional[int] = Query(None, description="Filter by applicable year"),
+    status: Optional[str] = Query(None, description="Filter by status (ACTIVE, INACTIVE, DRAFT)"),
+    db: Session = Depends(get_db)
+):
+    """
+    List registered emission factors with optional multi-parameter filtering.
+    """
+    factors = emission_factor_service.list_factors(
+        db,
+        activity_type=activity_type,
+        category=category,
+        scope=scope,
+        geography=geography,
+        year=year,
+        status=status,
+    )
+    return {
+        "total": len(factors),
+        "factors": factors
+    }
+
+@router.get("/emission-factors/candidates", response_model=CandidateMatchResponse)
+def find_emission_factor_candidates(
+    activity_type: str = Query(..., description="Target activity type (e.g. purchased_electricity, diesel)"),
+    activity_unit: str = Query(..., description="Activity unit (e.g. kWh, L, scm, tonne_km)"),
+    geography: Optional[str] = Query(None, description="Geographic boundary (e.g. India, Global)"),
+    year: Optional[int] = Query(None, description="Applicable calendar year"),
+    scope: Optional[str] = Query(None, description="Scope filter (SCOPE_1, SCOPE_2, SCOPE_3)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Deterministic candidate matching endpoint for activity data.
+    Validates unit compatibility and returns MATCHED, NO_MATCH, MULTIPLE_MATCHES, or INVALID_REQUEST.
+    """
+    return emission_factor_service.find_candidates(
+        db,
+        activity_type=activity_type,
+        activity_unit=activity_unit,
+        geography=geography,
+        year=year,
+        scope=scope,
+    )
+
+@router.get("/emission-factors/{factor_id}", response_model=EmissionFactorResponse)
+def get_emission_factor(factor_id: int, db: Session = Depends(get_db)):
+    """
+    Retrieve details of a single emission factor by primary key ID.
+    """
+    factor = emission_factor_service.get_factor(db, factor_id)
+    if not factor:
+        raise HTTPException(status_code=404, detail="Emission factor not found")
+    return factor
 
 @router.get("/stats", response_model=DashboardStatsResponse)
 def get_dashboard_stats(db: Session = Depends(get_db)):

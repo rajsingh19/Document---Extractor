@@ -3,11 +3,12 @@ import Navbar from './components/Navbar';
 import Documents from './pages/Documents';
 import DocumentDetail from './pages/DocumentDetail';
 import EvidenceReport from './pages/EvidenceReport';
+import EmissionFactors from './pages/EmissionFactors';
 import Metrics from './pages/Metrics';
 import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument, getAttentionItems } from './services/api';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('documents'); // 'documents' | 'metrics'
+  const [activeTab, setActiveTab] = useState('documents'); // 'documents' | 'metrics' | 'emission-factors'
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [reportDocId, setReportDocId] = useState(null);
   const [health, setHealth] = useState(null);
@@ -44,6 +45,13 @@ export default function App() {
       } catch (err) {
         console.error('Failed to load document from URL:', err);
       }
+      return;
+    }
+
+    if (pathname === '/emission-factors') {
+      setActiveTab('emission-factors');
+      setSelectedDocument(null);
+      setReportDocId(null);
       return;
     }
 
@@ -227,6 +235,8 @@ export default function App() {
               window.history.pushState(null, '', `/documents/${id}/report`);
             }}
           />
+        ) : activeTab === 'emission-factors' ? (
+          <EmissionFactors />
         ) : activeTab === 'metrics' ? (
           <Metrics
             stats={stats}
