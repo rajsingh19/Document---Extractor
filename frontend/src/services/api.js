@@ -137,6 +137,27 @@ export const getAttentionItems = async () => {
   return response.data;
 };
 
+export const getEvidenceReport = async (documentId) => {
+  const response = await api.get(`/documents/${documentId}/evidence-report`);
+  return response.data;
+};
+
+export const downloadEvidenceReportPDF = async (documentId, filename = null) => {
+  const response = await api.get(`/documents/${documentId}/evidence-report/pdf`, {
+    responseType: 'blob',
+  });
+  const blob = new Blob([response.data], { type: 'application/pdf' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', filename || `sustainability_report_doc_${documentId}.pdf`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
 export default api;
+
 
 

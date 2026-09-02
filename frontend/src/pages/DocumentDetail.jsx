@@ -22,6 +22,7 @@ import ExtractionTable from '../components/ExtractionTable';
 import EvidenceSection from '../components/EvidenceSection';
 import QualitySummary from '../components/QualitySummary';
 import DocumentChatbot from '../components/copilot/DocumentChatbot';
+import EvidenceReport from './EvidenceReport';
 import { 
   verifyField, 
   correctField, 
@@ -34,7 +35,8 @@ export default function DocumentDetail({
   document: initialDoc,
   onBack,
   onDocumentUpdated,
-  onDocumentDeleted
+  onDocumentDeleted,
+  onViewReport
 }) {
   const [doc, setDoc] = useState(initialDoc);
   const [auditLogs, setAuditLogs] = useState([]);
@@ -193,6 +195,7 @@ export default function DocumentDetail({
 
   const sidebarNavItems = [
     { id: 'overview', label: 'Overview', icon: FileText },
+    { id: 'evidence_report', label: 'Evidence Report', icon: FileText },
     { id: 'energy', label: 'Energy & Emissions', icon: Zap },
     { id: 'water', label: 'Water & Waste', icon: Droplet },
     { id: 'financial', label: 'Financial', icon: IndianRupee },
@@ -281,10 +284,20 @@ export default function DocumentDetail({
               </p>
             </div>
 
-            <div className="flex items-center space-x-3 text-xs">
-              <span className="text-slate-400 font-medium hidden md:inline">
-                Extracted on: Sep 1, 2025 &bull; 05:55 PM
-              </span>
+            <div className="flex items-center space-x-2.5 text-xs">
+              <button
+                onClick={() => {
+                  if (onViewReport) {
+                    onViewReport(doc.id);
+                  } else {
+                    setActiveSection('evidence_report');
+                  }
+                }}
+                className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold transition-colors shadow-2xs flex items-center space-x-1.5"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Generate Report</span>
+              </button>
               <button
                 onClick={handleExportJson}
                 className="px-3.5 py-1.5 bg-white hover:bg-slate-50 border border-[#E5E7EB] rounded-lg text-slate-700 text-xs font-semibold transition-colors shadow-2xs flex items-center space-x-1.5"
@@ -297,7 +310,13 @@ export default function DocumentDetail({
         </div>
 
         {/* SECTION ROUTING: If user clicked detailed sidebar tabs */}
-        {activeSection !== 'overview' ? (
+        {activeSection === 'evidence_report' ? (
+          <EvidenceReport
+            documentId={doc.id}
+            onBack={() => setActiveSection('overview')}
+            onNavigateToDocument={() => setActiveSection('overview')}
+          />
+        ) : activeSection !== 'overview' ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between bg-white p-4 border border-[#E5E7EB] rounded-xl shadow-2xs">
               <div className="flex items-center space-x-2">

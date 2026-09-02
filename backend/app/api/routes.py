@@ -33,6 +33,9 @@ from backend.app.schemas.copilot import (
     CopilotContext,
     AttentionResponse
 )
+from backend.app.schemas.report import ReportData
+from backend.app.services.evidence_report import evidence_report_service
+from backend.app.services.report_pdf import report_pdf_renderer
 from backend.app.services.extraction_service import ExtractionPipelineService
 from backend.app.services.ocr_service import OCRService
 from backend.app.services.llm_service import LLMService
@@ -892,6 +895,49 @@ def download_document_json(document_id: int, db: Session = Depends(get_db)):
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+@router.get("/documents/{document_id}/evidence-report", response_model=ReportData)
+def get_document_evidence_report(document_id: int, db: Session = Depends(get_db)):
+    """
+    Generate grounded sustainability evidence report data for a specific document.
+    Deterministic, document-scoped, read-only.
+    """
+    try:
+        report_data = evidence_report_service.generate_report(db, document_id)
+        return report_data
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Error generating evidence report for doc {document_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate evidence report")
+
+@router.get("/documents/{document_id}/evidence-report/pdf")
+def download_document_evidence_report_pdf(document_id: int, db: Session = Depends(get_db)):
+    """
+    Generate and download deterministic PDF for document sustainability evidence report.
+    Consumes the identical ReportData object to prevent data divergence.
+    """
+    try:
+        report_data = evidence_report_service.generate_report(db, document_id)
+        pdf_bytes = report_pdf_renderer.render(report_data)
+
+        safe_filename = f"sustainability_report_doc_{document_id}.pdf"
+        if report_data.metadata.document_name:
+            base_name = os.path.splitext(report_data.metadata.document_name)[0]
+            clean_base = "".join(c for c in base_name if c.isalnum() or c in ("-", "_")).strip()
+            if clean_base:
+                safe_filename = f"{clean_base}_evidence_report.pdf"
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'}
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Error generating report PDF for doc {document_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate evidence report PDF")
 
 @router.get("/stats", response_model=DashboardStatsResponse)
 def get_dashboard_stats(db: Session = Depends(get_db)):

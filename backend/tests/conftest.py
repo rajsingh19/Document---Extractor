@@ -68,3 +68,14 @@ def isolate_document_one():
             for bm in bad_m:
                 db.delete(bm)
             db.commit()
+
+        # Clean orphan metrics whose documents were deleted
+        from backend.app.models.document import Document
+        doc_ids = [d.id for d in db.query(Document.id).all()]
+        if doc_ids:
+            orphans = db.query(SustainabilityMetric).filter(~SustainabilityMetric.document_id.in_(doc_ids)).all()
+            if orphans:
+                for o in orphans:
+                    db.delete(o)
+                db.commit()
+

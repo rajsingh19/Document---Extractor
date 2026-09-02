@@ -2,12 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from './components/Navbar';
 import Documents from './pages/Documents';
 import DocumentDetail from './pages/DocumentDetail';
+import EvidenceReport from './pages/EvidenceReport';
 import Metrics from './pages/Metrics';
 import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument, getAttentionItems } from './services/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('documents'); // 'documents' | 'metrics'
   const [selectedDocument, setSelectedDocument] = useState(null);
+  const [reportDocId, setReportDocId] = useState(null);
   const [health, setHealth] = useState(null);
   const [stats, setStats] = useState(null);
   const [documents, setDocuments] = useState([]);
@@ -23,9 +25,18 @@ export default function App() {
 
   // Synchronize route based on URL pathname
   const resolveRoute = useCallback(async (pathname) => {
+    const reportMatch = pathname.match(/^\/documents\/(\d+)\/report$/);
+    if (reportMatch) {
+      const docId = parseInt(reportMatch[1], 10);
+      setReportDocId(docId);
+      setSelectedDocument(null);
+      return;
+    }
+
     const docMatch = pathname.match(/^\/documents\/(\d+)$/);
     if (docMatch) {
       const docId = parseInt(docMatch[1], 10);
+      setReportDocId(null);
       setActiveTab('documents');
       try {
         const fullDoc = await getDocument(docId);
@@ -39,12 +50,14 @@ export default function App() {
     if (pathname === '/metrics') {
       setActiveTab('metrics');
       setSelectedDocument(null);
+      setReportDocId(null);
       return;
     }
 
     // Default fallback to /documents
     setActiveTab('documents');
     setSelectedDocument(null);
+    setReportDocId(null);
     if (pathname === '/ai-copilot' || pathname === '/' || pathname === '') {
       window.history.replaceState(null, '', '/documents');
     }
@@ -179,7 +192,7 @@ export default function App() {
       
       {/* Top Navbar */}
       <Navbar
-        activeTab={selectedDocument ? 'documents' : activeTab}
+        activeTab={reportDocId || selectedDocument ? 'documents' : activeTab}
         onSelectTab={handleNavTab}
         health={health}
         onSeedSample={handleSeedSample}
@@ -188,12 +201,31 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {selectedDocument ? (
+        {reportDocId ? (
+          <EvidenceReport
+            documentId={reportDocId}
+            onBack={() => {
+              const id = reportDocId;
+              setReportDocId(null);
+              window.history.pushState(null, '', `/documents/${id}`);
+              handleSelectDocument({ id });
+            }}
+            onNavigateToDocument={(id) => {
+              setReportDocId(null);
+              window.history.pushState(null, '', `/documents/${id}`);
+              handleSelectDocument({ id });
+            }}
+          />
+        ) : selectedDocument ? (
           <DocumentDetail
             document={selectedDocument}
             onBack={handleBackFromDocument}
             onDocumentUpdated={handleDocumentUpdated}
             onDocumentDeleted={handleDocumentDeleted}
+            onViewReport={(id) => {
+              setReportDocId(id);
+              window.history.pushState(null, '', `/documents/${id}/report`);
+            }}
           />
         ) : activeTab === 'metrics' ? (
           <Metrics
