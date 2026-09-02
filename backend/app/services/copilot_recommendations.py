@@ -17,22 +17,31 @@ class CopilotRecommendationService:
     from normalized metrics, historical trends, and data quality signals.
     """
 
-    def generate_recommendations(self, db: Session, query: Optional[str] = None) -> List[RecommendationItem]:
+    def generate_recommendations(self, db: Session, query: Optional[str] = None, document_id: Optional[int] = None) -> List[RecommendationItem]:
         """
         Produce ranked, grounded recommendation items with transparent assumptions and exact source lineage.
         """
         recommendations: List[RecommendationItem] = []
         seen_keys = set()
 
-        metrics = db.query(SustainabilityMetric).order_by(desc(SustainabilityMetric.created_at)).all()
-        docs = db.query(Document).order_by(desc(Document.created_at)).all()
+        metrics_q = db.query(SustainabilityMetric)
+        docs_q = db.query(Document)
+        if document_id is not None:
+            metrics_q = metrics_q.filter(SustainabilityMetric.document_id == document_id)
+            docs_q = docs_q.filter(Document.id == document_id)
+
+        metrics = metrics_q.order_by(desc(SustainabilityMetric.created_at)).all()
+        docs = docs_q.order_by(desc(Document.created_at)).all()
         insights = insights_service.generate_metric_insights(db)
+        if document_id is not None:
+            insights = [i for i in insights if i.source_document_id == document_id]
 
         # 1. EMISSIONS Opportunities (Scope 1, Scope 2, Largest Contributor)
         scope1_m = next((m for m in metrics if m.metric_type in ("scope_1_emissions", "scope1_emissions")), None)
         scope2_m = next((m for m in metrics if m.metric_type in ("scope_2_emissions", "scope2_emissions")), None)
 
         if scope1_m or scope2_m:
+
             s1_val = scope1_m.value if scope1_m else 0.0
             s2_val = scope2_m.value if scope2_m else 0.0
             

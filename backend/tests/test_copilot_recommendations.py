@@ -44,9 +44,21 @@ def test_03_electricity_increase_creates_energy_opportunity():
 def test_04_fuel_increase_creates_fuel_opportunity():
     """4. Verify fuel consumption metric creates FUEL recommendation."""
     db: Session = next(get_db())
-    doc = db.query(Document).first()
+    test_doc = Document(
+        filename="test_fuel_fixture.pdf",
+        original_filename="test_fuel_fixture.pdf",
+        file_path="/tmp/test_fuel_fixture.pdf",
+        file_size=1024,
+        status="COMPLETED",
+        review_status="VERIFIED",
+        quality_score=90.0,
+        company_name="Apex Forgings",
+        document_type="Fuel Receipt"
+    )
+    db.add(test_doc)
+    db.commit()
     fuel_m = SustainabilityMetric(
-        document_id=doc.id,
+        document_id=test_doc.id,
         company_name="Apex Forgings",
         metric_type="fuel_consumption",
         category="energy",
@@ -56,28 +68,75 @@ def test_04_fuel_increase_creates_fuel_opportunity():
         source_field="fuel_diesel_liters",
         verification_status="VERIFIED"
     )
-    db.add(fuel_m)
-    db.commit()
-
-    recs = copilot_recommendation_service.generate_recommendations(db)
-    fuel_recs = [r for r in recs if r.category == "FUEL"]
-    assert len(fuel_recs) > 0
-    assert "fuel" in fuel_recs[0].title.lower() or "generator" in fuel_recs[0].title.lower()
+    try:
+        db.add(fuel_m)
+        db.commit()
+        recs = copilot_recommendation_service.generate_recommendations(db)
+        fuel_recs = [r for r in recs if r.category == "FUEL"]
+        assert len(fuel_recs) > 0
+        assert "fuel" in fuel_recs[0].title.lower() or "generator" in fuel_recs[0].title.lower()
+    finally:
+        db.delete(fuel_m)
+        db.delete(test_doc)
+        db.commit()
 
 def test_05_water_increase_creates_water_opportunity():
     """5. Verify water consumption creates WATER recommendation."""
     db: Session = next(get_db())
-    recs = copilot_recommendation_service.generate_recommendations(db)
-    water_recs = [r for r in recs if r.category == "WATER"]
-    if water_recs:
+    test_doc = Document(
+        filename="test_water_fixture.pdf",
+        original_filename="test_water_fixture.pdf",
+        file_path="/tmp/test_water_fixture.pdf",
+        file_size=1024,
+        status="COMPLETED",
+        review_status="VERIFIED",
+        quality_score=90.0,
+        company_name="Apex Forgings",
+        document_type="Water Utility Bill"
+    )
+    db.add(test_doc)
+    db.commit()
+    water_m = SustainabilityMetric(
+        document_id=test_doc.id,
+        company_name="Apex Forgings",
+        metric_type="water_consumption",
+        category="water",
+        value=500.0,
+        unit="kL",
+        confidence=0.95,
+        source_field="water_consumption_kl",
+        verification_status="VERIFIED"
+    )
+    try:
+        db.add(water_m)
+        db.commit()
+        recs = copilot_recommendation_service.generate_recommendations(db)
+        water_recs = [r for r in recs if r.category == "WATER"]
+        assert len(water_recs) > 0
         assert "water" in water_recs[0].title.lower()
+    finally:
+        db.delete(water_m)
+        db.delete(test_doc)
+        db.commit()
 
 def test_06_waste_increase_creates_waste_opportunity():
     """6. Verify waste metric creates WASTE recommendation."""
     db: Session = next(get_db())
-    doc = db.query(Document).first()
+    test_doc = Document(
+        filename="test_waste_fixture.pdf",
+        original_filename="test_waste_fixture.pdf",
+        file_path="/tmp/test_waste_fixture.pdf",
+        file_size=1024,
+        status="COMPLETED",
+        review_status="VERIFIED",
+        quality_score=90.0,
+        company_name="Apex Forgings",
+        document_type="Waste Manifest"
+    )
+    db.add(test_doc)
+    db.commit()
     waste_m = SustainabilityMetric(
-        document_id=doc.id,
+        document_id=test_doc.id,
         company_name="Apex Forgings",
         metric_type="hazardous_waste_generated",
         category="waste",
@@ -87,13 +146,18 @@ def test_06_waste_increase_creates_waste_opportunity():
         source_field="waste_hazardous_kg",
         verification_status="VERIFIED"
     )
-    db.add(waste_m)
-    db.commit()
+    try:
+        db.add(waste_m)
+        db.commit()
+        recs = copilot_recommendation_service.generate_recommendations(db)
+        waste_recs = [r for r in recs if r.category == "WASTE"]
+        assert len(waste_recs) > 0
+        assert "waste" in waste_recs[0].title.lower()
+    finally:
+        db.delete(waste_m)
+        db.delete(test_doc)
+        db.commit()
 
-    recs = copilot_recommendation_service.generate_recommendations(db)
-    waste_recs = [r for r in recs if r.category == "WASTE"]
-    assert len(waste_recs) > 0
-    assert "waste" in waste_recs[0].title.lower()
 
 def test_07_scope1_scope2_changes_handled_correctly():
     """7. Verify Scope 1 vs Scope 2 comparisons identify largest contributor."""

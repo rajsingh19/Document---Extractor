@@ -136,9 +136,21 @@ def test_07_and_08_sources_valid_and_invalid_rejected():
 def test_09_low_confidence_disclosed():
     """9. Verify low-confidence values carry a review disclaimer."""
     db: Session = next(get_db())
-    doc = db.query(Document).first()
+    test_doc = Document(
+        filename="test_low_conf_fixture.pdf",
+        original_filename="test_low_conf_fixture.pdf",
+        file_path="/tmp/test_lc_fixture.pdf",
+        file_size=1024,
+        status="COMPLETED",
+        review_status="NEEDS_REVIEW",
+        quality_score=50.0,
+        company_name="Apex Forgings",
+        document_type="Fuel Receipt"
+    )
+    db.add(test_doc)
+    db.commit()
     low_m = SustainabilityMetric(
-        document_id=doc.id,
+        document_id=test_doc.id,
         company_name="Apex Forgings",
         metric_type="fuel_consumption",
         category="energy",
@@ -148,19 +160,35 @@ def test_09_low_confidence_disclosed():
         source_field="fuel_diesel_liters",
         verification_status="AI_EXTRACTED"
     )
-    db.add(low_m)
-    db.commit()
-
-    ctx = copilot_context_service.build_context(db, "What is our fuel consumption?")
-    res = copilot_llm_service.generate_response(ctx)
-    assert "low confidence" in res.answer.lower() or "review" in res.answer.lower()
+    try:
+        db.add(low_m)
+        db.commit()
+        ctx = copilot_context_service.build_context(db, "What is our fuel consumption?")
+        res = copilot_llm_service.generate_response(ctx)
+        assert "low confidence" in res.answer.lower() or "review" in res.answer.lower()
+    finally:
+        db.delete(low_m)
+        db.delete(test_doc)
+        db.commit()
 
 def test_10_human_verified_preferred():
     """10. Verify human-verified metrics are tagged accordingly."""
     db: Session = next(get_db())
-    doc = db.query(Document).first()
+    test_doc = Document(
+        filename="test_verified_fixture.pdf",
+        original_filename="test_verified_fixture.pdf",
+        file_path="/tmp/test_vf_fixture.pdf",
+        file_size=1024,
+        status="COMPLETED",
+        review_status="VERIFIED",
+        quality_score=95.0,
+        company_name="Apex Forgings",
+        document_type="Water Utility Bill"
+    )
+    db.add(test_doc)
+    db.commit()
     verified_m = SustainabilityMetric(
-        document_id=doc.id,
+        document_id=test_doc.id,
         company_name="Apex Forgings",
         metric_type="water_consumption",
         category="water",
@@ -170,12 +198,17 @@ def test_10_human_verified_preferred():
         source_field="water_consumption_kl",
         verification_status="HUMAN_VERIFIED"
     )
-    db.add(verified_m)
-    db.commit()
+    try:
+        db.add(verified_m)
+        db.commit()
+        ctx = copilot_context_service.build_context(db, "What is our water consumption?")
+        res = copilot_llm_service.generate_response(ctx)
+        assert "human-verified" in res.answer.lower() or "350" in res.answer
+    finally:
+        db.delete(verified_m)
+        db.delete(test_doc)
+        db.commit()
 
-    ctx = copilot_context_service.build_context(db, "What is our water consumption?")
-    res = copilot_llm_service.generate_response(ctx)
-    assert "human-verified" in res.answer.lower() or "350" in res.answer
 
 def test_11_empty_context_handled_safely():
     """11. Verify query against a context with no matching metrics states unavailability without hallucinating."""
