@@ -38,10 +38,13 @@ from backend.app.schemas.emission_factor import (
     EmissionFactorResponse,
     EmissionFactorListResponse,
     CandidateMatchResponse,
+    FactorResolutionRequest,
+    FactorResolutionResponse,
 )
 from backend.app.services.evidence_report import evidence_report_service
 from backend.app.services.report_pdf import report_pdf_renderer
 from backend.app.services.emission_factor_service import emission_factor_service
+from backend.app.services.emission_factor_resolver import emission_factor_resolver
 from backend.app.services.extraction_service import ExtractionPipelineService
 from backend.app.services.ocr_service import OCRService
 from backend.app.services.llm_service import LLMService
@@ -993,6 +996,17 @@ def find_emission_factor_candidates(
         year=year,
         scope=scope,
     )
+
+@router.post("/emission-factors/resolve", response_model=FactorResolutionResponse)
+def resolve_emission_factor(
+    payload: FactorResolutionRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Authoritative deterministic emission factor resolution endpoint (Step 12B).
+    Returns MATCHED, NO_MATCH, MULTIPLE_MATCHES, or INVALID_REQUEST with transparent reasons.
+    """
+    return emission_factor_resolver.resolve(db, payload)
 
 @router.get("/emission-factors/{factor_id}", response_model=EmissionFactorResponse)
 def get_emission_factor(factor_id: int, db: Session = Depends(get_db)):

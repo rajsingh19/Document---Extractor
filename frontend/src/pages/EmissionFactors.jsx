@@ -12,9 +12,11 @@ import {
   Info,
   ShieldAlert,
   ArrowRight,
-  ExternalLink
+  ExternalLink,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
-import { getEmissionFactors, findEmissionFactorCandidates } from '../services/api';
+import { getEmissionFactors, resolveEmissionFactor } from '../services/api';
 
 export default function EmissionFactors() {
   const [factors, setFactors] = useState([]);
@@ -28,13 +30,16 @@ export default function EmissionFactors() {
   const [statusFilter, setStatusFilter] = useState('');
   const [yearFilter, setYearFilter] = useState('');
 
-  // Interactive Match Tester
+  // Interactive Match Tester (Step 12B Resolver)
   const [testActivity, setTestActivity] = useState('purchased_electricity');
   const [testUnit, setTestUnit] = useState('kWh');
   const [testGeography, setTestGeography] = useState('India');
   const [testYear, setTestYear] = useState('2024');
+  const [testScope, setTestScope] = useState('SCOPE_2');
+  const [testPreferredCode, setTestPreferredCode] = useState('');
   const [testResult, setTestResult] = useState(null);
   const [testingMatch, setTestingMatch] = useState(false);
+  const [showRejected, setShowRejected] = useState(false);
 
   const fetchFactors = useCallback(async () => {
     setLoading(true);
@@ -64,19 +69,23 @@ export default function EmissionFactors() {
     e.preventDefault();
     setTestingMatch(true);
     setTestResult(null);
+    setShowRejected(false);
     try {
-      const params = {
+      const payload = {
         activity_type: testActivity,
         activity_unit: testUnit,
-        geography: testGeography || undefined,
+        geography: testGeography.trim() || undefined,
         year: testYear ? parseInt(testYear, 10) : undefined,
+        scope: testScope.trim() || undefined,
+        preferred_factor_code: testPreferredCode.trim() || undefined,
       };
-      const result = await findEmissionFactorCandidates(params);
+      const result = await resolveEmissionFactor(payload);
       setTestResult(result);
     } catch (err) {
       setTestResult({
-        status: 'ERROR',
-        message: err.response?.data?.detail || 'Candidate test request failed.',
+        status: 'INVALID_REQUEST',
+        message: err.response?.data?.detail || 'Factor resolution request failed.',
+        resolution_version: '1.0',
       });
     } finally {
       setTestingMatch(false);
@@ -103,13 +112,13 @@ export default function EmissionFactors() {
           <div>
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 mb-2">
               <Database className="w-3 h-3" />
-              <span>Versioned Factor Registry &bull; Step 12A</span>
+              <span>Deterministic Factor Registry &bull; Step 12B</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
-              Emission Factor Registry
+              Emission Factor Registry &amp; Resolver
             </h1>
             <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
-              Deterministic, auditable emission factor database for activity data carbon calculations 
+              Deterministic, auditable emission factor database and resolution engine for activity data carbon calculations 
               (Activity &times; Factor = CO<sub>2</sub>e). Factors are strictly non-AI reference data with immutable provenance.
             </p>
           </div>
@@ -131,19 +140,24 @@ export default function EmissionFactors() {
         </div>
       </div>
 
-      {/* Interactive Candidate Matcher Test Bench */}
+      {/* Interactive Resolver Test Bench */}
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-2xs">
-        <div className="flex items-center gap-2 mb-3">
-          <ShieldAlert className="w-4 h-4 text-emerald-700" />
-          <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-            Deterministic Candidate Matcher (Validation Tool)
-          </h2>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-emerald-700" />
+            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Emission Factor Resolver (Step 12B Engine)
+            </h2>
+          </div>
+          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-200 text-slate-700">
+            Algorithm v1.0
+          </span>
         </div>
         <p className="text-xs text-slate-500 mb-4">
-          Test the deterministic matching rules and unit compatibility without executing carbon calculations.
+          Test the deterministic resolution policy and unit compatibility without executing carbon calculations.
         </p>
 
-        <form onSubmit={handleTestMatch} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <form onSubmit={handleTestMatch} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
           <div>
             <label className="block text-[11px] font-bold text-slate-600 mb-1">Activity Type</label>
             <select
@@ -195,44 +209,133 @@ export default function EmissionFactors() {
             />
           </div>
 
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">Scope</label>
+            <select
+              value={testScope}
+              onChange={(e) => setTestScope(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-medium focus:outline-emerald-600"
+            >
+              <option value="">Any Scope</option>
+              <option value="SCOPE_1">SCOPE_1</option>
+              <option value="SCOPE_2">SCOPE_2</option>
+              <option value="SCOPE_3">SCOPE_3</option>
+            </select>
+          </div>
+
           <div className="flex items-end">
             <button
               type="submit"
               disabled={testingMatch}
               className="w-full py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold transition-colors flex items-center justify-center space-x-1 shadow-2xs"
             >
-              <span>{testingMatch ? 'Matching...' : 'Test Match'}</span>
+              <span>{testingMatch ? 'Resolving...' : 'Resolve Factor'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </form>
 
         {testResult && (
-          <div className={`mt-4 p-3.5 rounded-lg border text-xs ${
+          <div className={`mt-4 p-4 rounded-lg border text-xs ${
             testResult.status === 'MATCHED'
               ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
               : testResult.status === 'MULTIPLE_MATCHES'
               ? 'bg-blue-50/80 border-blue-200 text-blue-900'
+              : testResult.status === 'INVALID_REQUEST'
+              ? 'bg-red-50/80 border-red-200 text-red-900'
               : 'bg-amber-50/80 border-amber-200 text-amber-900'
           }`}>
-            <div className="flex items-center justify-between font-bold mb-1">
-              <span className="flex items-center gap-1.5">
+            <div className="flex items-center justify-between font-bold mb-2">
+              <span className="flex items-center gap-1.5 text-sm">
                 {testResult.status === 'MATCHED' ? (
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 ) : (
                   <AlertCircle className="w-4 h-4 text-amber-600" />
                 )}
-                Match Status: {testResult.status}
+                Resolution Status: {testResult.status}
               </span>
-              <span className="text-[11px] font-mono">Found: {testResult.match_count || 0} candidate(s)</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-mono bg-white/70 px-2 py-0.5 rounded border border-current">
+                  Resolver v{testResult.resolution_version || '1.0'}
+                </span>
+                <span className="text-[11px] font-mono">
+                  {testResult.candidates?.length || (testResult.selected_factor ? 1 : 0)} valid candidate(s)
+                </span>
+              </div>
             </div>
-            <p className="mt-0.5">{testResult.message}</p>
-            {testResult.matched_factor && (
-              <div className="mt-2 pt-2 border-t border-emerald-200/60 font-mono text-[11px] flex flex-wrap gap-4">
-                <span>Code: <strong>{testResult.matched_factor.factor_code}</strong></span>
-                <span>Value: <strong>{testResult.matched_factor.factor_value} {testResult.matched_factor.factor_unit}</strong></span>
-                <span>Scope: <strong>{testResult.matched_factor.scope}</strong></span>
-                <span>Year: <strong>{testResult.matched_factor.applicable_year || 'N/A'}</strong></span>
+
+            <p className="mt-1 font-medium">{testResult.message}</p>
+
+            {/* MATCHED Details */}
+            {testResult.selected_factor && (
+              <div className="mt-3 p-3 bg-white border border-emerald-200 rounded-lg space-y-2">
+                <div className="font-mono text-xs font-bold text-slate-900 flex items-center justify-between">
+                  <span>Selected: {testResult.selected_factor.factor_code}</span>
+                  <span className="text-emerald-700 text-sm">
+                    {testResult.selected_factor.factor_value} {testResult.selected_factor.factor_unit}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-600 grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-100">
+                  <div>Scope: <strong className="text-slate-800">{testResult.selected_factor.scope}</strong></div>
+                  <div>Geography: <strong className="text-slate-800">{testResult.selected_factor.geography}</strong></div>
+                  <div>Year: <strong className="text-slate-800">{testResult.selected_factor.applicable_year || 'N/A'}</strong></div>
+                  <div>Source: <strong className="text-slate-800">{testResult.selected_factor.source_name}</strong></div>
+                </div>
+
+                {testResult.resolution_reasons?.length > 0 && (
+                  <div className="pt-2 border-t border-slate-100">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Resolution Reasons:</span>
+                    <ul className="list-disc list-inside space-y-0.5 text-[11px] text-slate-700">
+                      {testResult.resolution_reasons.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* MULTIPLE_MATCHES Candidates List */}
+            {testResult.status === 'MULTIPLE_MATCHES' && testResult.candidates?.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider block">Valid Candidate Factors (Manual Disambiguation Required):</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {testResult.candidates.map((c) => (
+                    <div key={c.factor_id} className="p-2.5 bg-white border border-blue-200 rounded-lg text-[11px] space-y-1">
+                      <div className="font-mono font-bold text-slate-900">{c.factor_code}</div>
+                      <div className="text-slate-600">{c.factor_value} {c.factor_unit} &bull; Year: {c.applicable_year || 'N/A'} &bull; {c.scope}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Rejected Candidates Toggle (Explainability) */}
+            {testResult.rejected_candidates?.length > 0 && (
+              <div className="mt-3 pt-2 border-t border-current/20">
+                <button
+                  type="button"
+                  onClick={() => setShowRejected(!showRejected)}
+                  className="flex items-center gap-1 text-[11px] font-semibold underline hover:opacity-80 transition-opacity"
+                >
+                  <span>{showRejected ? 'Hide' : 'View'} Evaluated Non-Selected Factors ({testResult.rejected_candidates.length})</span>
+                  {showRejected ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+
+                {showRejected && (
+                  <div className="mt-2 space-y-2">
+                    {testResult.rejected_candidates.map((rc) => (
+                      <div key={rc.factor_id} className="p-2 bg-white/90 border border-slate-200 rounded text-[11px] text-slate-700">
+                        <div className="font-mono font-semibold text-slate-900">{rc.factor_code}</div>
+                        <ul className="list-disc list-inside text-red-700 text-[10px] mt-0.5">
+                          {rc.rejection_reasons.map((rj, idx) => (
+                            <li key={idx}>{rj}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

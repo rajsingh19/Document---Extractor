@@ -172,6 +172,11 @@ export const findEmissionFactorCandidates = async (params = {}) => {
   return response.data;
 };
 
+export const resolveEmissionFactor = async (payload) => {
+  const response = await api.post('/emission-factors/resolve', payload);
+  return response.data;
+};
+
 export default api;
 
 
