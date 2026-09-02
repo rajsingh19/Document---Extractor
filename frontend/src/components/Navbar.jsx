@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, BarChart3, Activity, X, ShieldCheck, Database, Cpu, Sparkles } from 'lucide-react';
+import { FileText, BarChart3, Activity, X, ShieldCheck, Database, Cpu, Sparkles, Layers } from 'lucide-react';
 
 export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, isSeeding }) {
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -58,6 +58,18 @@ export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, i
               >
                 <Database className="w-3.5 h-3.5" />
                 <span>Emission Factors</span>
+              </button>
+
+              <button
+                onClick={() => onSelectTab('activity-data')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'activity-data'
+                    ? 'bg-[#EAF7F2] text-[#0F6B56]'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Activity Data</span>
               </button>
             </nav>
           </div>

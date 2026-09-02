@@ -41,10 +41,18 @@ from backend.app.schemas.emission_factor import (
     FactorResolutionRequest,
     FactorResolutionResponse,
 )
+from backend.app.models.activity_data import ActivityData
+from backend.app.schemas.activity_data import (
+    ActivityDataNormalizeRequest,
+    NormalizationPreviewResponse,
+    ActivityDataResponse,
+    ActivityDataListResponse,
+)
 from backend.app.services.evidence_report import evidence_report_service
 from backend.app.services.report_pdf import report_pdf_renderer
 from backend.app.services.emission_factor_service import emission_factor_service
 from backend.app.services.emission_factor_resolver import emission_factor_resolver
+from backend.app.services.activity_data_normalizer import activity_data_normalizer
 from backend.app.services.extraction_service import ExtractionPipelineService
 from backend.app.services.ocr_service import OCRService
 from backend.app.services.llm_service import LLMService
@@ -1017,6 +1025,80 @@ def get_emission_factor(factor_id: int, db: Session = Depends(get_db)):
     if not factor:
         raise HTTPException(status_code=404, detail="Emission factor not found")
     return factor
+
+# ==========================================
+# Canonical Activity Data Endpoints (Step 12C)
+# ==========================================
+
+@router.get("/activity-data", response_model=ActivityDataListResponse)
+def list_activity_data(
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    activity_type: Optional[str] = Query(None, description="Filter by activity type"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    status: Optional[str] = Query(None, description="Filter by normalization status"),
+    activity_role: Optional[str] = Query(None, description="Filter by role: TOTAL, COMPONENT, SUPPORTING"),
+    calculation_eligible: Optional[bool] = Query(None, description="Filter by calculation eligibility"),
+    db: Session = Depends(get_db)
+):
+    """
+    List canonical ActivityData records with multi-parameter filtering.
+    """
+    query = db.query(ActivityData)
+    if document_id is not None:
+        query = query.filter(ActivityData.document_id == document_id)
+    if activity_type:
+        query = query.filter(ActivityData.activity_type == activity_type.strip().lower())
+    if category:
+        query = query.filter(ActivityData.category == category.strip().upper())
+    if status:
+        query = query.filter(ActivityData.normalization_status == status.strip().upper())
+    if activity_role:
+        query = query.filter(ActivityData.activity_role == activity_role.strip().upper())
+    if calculation_eligible is not None:
+        query = query.filter(ActivityData.calculation_eligible == calculation_eligible)
+
+    records = query.order_by(ActivityData.id.asc()).all()
+    return {
+        "total": len(records),
+        "items": records
+    }
+
+@router.post("/activity-data/normalize", response_model=NormalizationPreviewResponse)
+def preview_normalize_activity(
+    payload: ActivityDataNormalizeRequest,
+):
+    """
+    Preview activity data normalization without writing to database.
+    """
+    return activity_data_normalizer.preview_normalization(payload)
+
+@router.get("/activity-data/{activity_id}", response_model=ActivityDataResponse)
+def get_activity_data_by_id(activity_id: int, db: Session = Depends(get_db)):
+    """
+    Retrieve single canonical ActivityData record by ID.
+    """
+    record = db.query(ActivityData).filter(ActivityData.id == activity_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Activity data record not found")
+    return record
+
+@router.get("/documents/{document_id}/activity-data", response_model=ActivityDataListResponse)
+def get_document_activity_data(document_id: int, db: Session = Depends(get_db)):
+    """
+    Retrieve all canonical ActivityData records for a specific document.
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    records = db.query(ActivityData).filter(
+        ActivityData.document_id == document_id
+    ).order_by(ActivityData.id.asc()).all()
+
+    return {
+        "total": len(records),
+        "items": records
+    }
 
 @router.get("/stats", response_model=DashboardStatsResponse)
 def get_dashboard_stats(db: Session = Depends(get_db)):

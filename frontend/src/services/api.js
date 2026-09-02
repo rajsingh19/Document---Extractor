@@ -177,6 +177,26 @@ export const resolveEmissionFactor = async (payload) => {
   return response.data;
 };
 
+export const getActivityData = async (params = {}) => {
+  const response = await api.get('/activity-data', { params });
+  return response.data;
+};
+
+export const getActivityDataById = async (activityId) => {
+  const response = await api.get(`/activity-data/${activityId}`);
+  return response.data;
+};
+
+export const getDocumentActivityData = async (documentId) => {
+  const response = await api.get(`/documents/${documentId}/activity-data`);
+  return response.data;
+};
+
+export const previewNormalizeActivity = async (payload) => {
+  const response = await api.post('/activity-data/normalize', payload);
+  return response.data;
+};
+
 export default api;
 
 

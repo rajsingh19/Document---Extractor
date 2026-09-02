@@ -36,6 +36,7 @@ def init_db():
     from backend.app.models.audit import AuditLog  # noqa: F401
     from backend.app.models.sustainability_metric import SustainabilityMetric  # noqa: F401
     from backend.app.models.emission_factor import EmissionFactor  # noqa: F401
+    from backend.app.models.activity_data import ActivityData  # noqa: F401
     Base.metadata.create_all(bind=engine)
     
     # Auto-migration for SQLite columns added in Step 3
@@ -54,6 +55,19 @@ def init_db():
                 conn.execute(text("ALTER TABLE documents ADD COLUMN field_corrections JSON"))
             if "file_hash" not in existing_cols:
                 conn.execute(text("ALTER TABLE documents ADD COLUMN file_hash VARCHAR(64)"))
+            # Auto-migration for ActivityData columns if table exists
+            try:
+                result_act = conn.execute(text("PRAGMA table_info(activity_data)"))
+                act_cols = [row[1] for row in result_act.fetchall()]
+                if act_cols:
+                    if "calculation_eligible" not in act_cols:
+                        conn.execute(text("ALTER TABLE activity_data ADD COLUMN calculation_eligible BOOLEAN DEFAULT 1"))
+                    if "activity_group_id" not in act_cols:
+                        conn.execute(text("ALTER TABLE activity_data ADD COLUMN activity_group_id VARCHAR(100)"))
+                    if "activity_role" not in act_cols:
+                        conn.execute(text("ALTER TABLE activity_data ADD COLUMN activity_role VARCHAR(50) DEFAULT 'TOTAL'"))
+            except Exception as e_act:
+                pass
             if "classification" not in existing_cols:
                 conn.execute(text("ALTER TABLE documents ADD COLUMN classification JSON"))
                 
@@ -173,6 +187,10 @@ def init_db():
             # 3. Seed demo emission factors registry (Step 12A)
             from backend.app.services.emission_factor_service import emission_factor_service
             emission_factor_service.seed_demo_factors(db_session)
+
+            # 4. Synchronize canonical activity data for Document #1 (Step 12C)
+            from backend.app.services.activity_data_normalizer import activity_data_normalizer
+            activity_data_normalizer.sync_document_activities(db_session, 1)
 
             db_session.commit()
     except Exception as e:

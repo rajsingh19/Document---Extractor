@@ -4,6 +4,7 @@ import Documents from './pages/Documents';
 import DocumentDetail from './pages/DocumentDetail';
 import EvidenceReport from './pages/EvidenceReport';
 import EmissionFactors from './pages/EmissionFactors';
+import ActivityDataPage from './pages/ActivityData';
 import Metrics from './pages/Metrics';
 import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument, getAttentionItems } from './services/api';
 
@@ -50,6 +51,13 @@ export default function App() {
 
     if (pathname === '/emission-factors') {
       setActiveTab('emission-factors');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      return;
+    }
+
+    if (pathname === '/activity-data') {
+      setActiveTab('activity-data');
       setSelectedDocument(null);
       setReportDocId(null);
       return;
@@ -237,6 +245,8 @@ export default function App() {
           />
         ) : activeTab === 'emission-factors' ? (
           <EmissionFactors />
+        ) : activeTab === 'activity-data' ? (
+          <ActivityDataPage />
         ) : activeTab === 'metrics' ? (
           <Metrics
             stats={stats}
