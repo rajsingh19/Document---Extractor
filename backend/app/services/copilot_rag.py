@@ -288,6 +288,20 @@ class CopilotVectorIndex:
                 document_type=doc_type,
                 reporting_period=period
             )
+            if not doc_chunks:
+                comp_name = getattr(doc, 'company_name', '') or ''
+                text_fallback = f"{doc_name} ({doc_type or 'Document'}) {comp_name}".strip()
+                if text_fallback:
+                    doc_chunks = [RAGDocumentChunk(
+                        chunk_id=f"doc_{doc_id}_p1_c1",
+                        document_id=doc_id,
+                        document_name=doc_name,
+                        document_type=doc_type,
+                        page=1,
+                        text=text_fallback,
+                        reporting_period=period,
+                        source_field="extracted_text"
+                    )]
             all_chunks.extend(doc_chunks)
 
         self.add_chunks(all_chunks)
@@ -495,7 +509,7 @@ def format_metric_label(key: Optional[str]) -> str:
 class CopilotRAGRouter:
     """
     Lightweight deterministic query router (Phase 3).
-    Determines retrieval modes (METRIC, DOCUMENT, HYBRID, EMISSIONS, RECOMMENDATION, ATTENTION, TREND, MISSING_DATA)
+    Determines retrieval modes (METRIC_QUERY, DOCUMENT_SEARCH, ACTION_RECOMMENDATION, EMISSIONS_ANALYSIS, TREND_ANALYSIS, DOCUMENT_REVIEW, MISSING_DATA)
     without relying on the LLM.
     """
 
@@ -505,37 +519,43 @@ class CopilotRAGRouter:
         if not q:
             return "GENERAL"
 
-        # 1. MISSING_DATA / REVIEW / ATTENTION
+        hist_text = ""
+        if history:
+            hist_text = " ".join(turn.get("content", "").lower() for turn in history[-3:])
+
+        # 1. EMISSIONS & REDUCTION
+        if any(e in q for e in ["emission", "emissions", "carbon", "footprint", "ghg"]):
+            reduction_verbs = ["reduce", "reduction", "lower", "lowering", "decrease", "cut", "mitigate", "minimize", "focus"]
+            if any(v in q for v in reduction_verbs) or "how can" in q or "how to" in q:
+                return "ACTION_RECOMMENDATION"
+            return "EMISSIONS_ANALYSIS"
+
+        # 2. MISSING_DATA / REVIEW / ATTENTION
         if any(k in q for k in ["need review", "needs review", "attention", "pending review", "unverified", "flagged", "missing", "data gap", "gaps in data"]):
             if any(k in q for k in ["missing", "data gap", "unfilled", "not applicable"]):
                 return "MISSING_DATA"
-            return "ATTENTION"
+            return "DOCUMENT_REVIEW"
 
-        # 2. EMISSIONS REDUCTION / ACTION
-        reduction_verbs = ["reduce", "reduction", "lower", "lowering", "decrease", "cut", "mitigate", "minimize"]
-        emissions_terms = ["emission", "emissions", "carbon", "footprint", "ghg", "scope 1", "scope 2", "scope1", "scope2"]
-        has_reduction = any(v in q for v in reduction_verbs) and any(e in q for e in emissions_terms)
-        if has_reduction or any(k in q for k in ["how can i reduce", "how to reduce", "lower carbon footprint", "where should i focus to reduce"]):
-            return "EMISSIONS"
-
-        # 3. RECOMMENDATIONS / PRIORITY
-        if any(k in q for k in ["focus on first", "focus first", "what should i focus", "biggest opportunity", "recommendation", "recommendations", "next steps", "action recommendation"]):
-            return "RECOMMENDATION"
+        # 3. RECOMMENDATIONS / PRIORITY / OPPORTUNITY
+        if any(k in q for k in ["opportunity", "opportunities", "focus on first", "focus first", "what should i focus", "biggest opportunity", "recommendation", "recommendations", "next steps", "action recommendation"]):
+            return "ACTION_RECOMMENDATION"
 
         # 4. TREND / HISTORICAL
-        if any(k in q for k in ["why did", "trend", "change", "increase", "decrease", "history", "historical", "period over period", "trajectory"]):
-            return "TREND"
+        if any(k in q for k in ["why did", "trend", "change", "increase", "decrease", "history", "historical", "period over period", "trajectory", "previous month", "last month"]):
+            return "TREND_ANALYSIS"
+        if hist_text and any(k in q for k in ["previous", "prior", "last month", "change", "compared"]):
+            return "TREND_ANALYSIS"
 
-        # 5. METRIC QUERY (numerical facts: peak demand, electricity consumption, fuel, water, waste, scope 1, scope 2, total ghg, cost)
+        # 5. METRIC QUERY
         metric_keywords = ["peak demand", "electricity consumption", "fuel consumption", "water consumption", "scope 1", "scope 2", "total ghg", "active energy", "payable amount", "how much electricity", "how much fuel"]
         if any(k in q for k in metric_keywords) or (any(w in q for w in ["what is", "how much", "show", "tell me"]) and any(w in q for w in ["demand", "consumption", "emissions", "usage", "cost", "payable"])):
-            return "METRIC"
+            return "METRIC_QUERY"
 
-        # 6. DOCUMENT QUERY (specific document text / solar / details)
-        if any(k in q for k in ["document", "pdf", "bill say", "solar", "clause", "note", "certification", "compliance", "tariff", "summarize"]):
-            return "DOCUMENT"
+        # 6. DOCUMENT QUERY
+        if any(k in q for k in ["document", "pdf", "bill say", "solar", "clause", "note", "certification", "compliance", "tariff", "summarize", "documents do i have"]):
+            return "DOCUMENT_SEARCH"
 
-        return "HYBRID"
+        return "GENERAL"
 
 
 class CopilotHybridRetriever:
@@ -570,18 +590,16 @@ class CopilotHybridRetriever:
         retrieval_mode = CopilotRAGRouter.route_query(clean_query, history=history)
 
         # 1. Sync / populate vector index with documents from DB if empty
-        docs_query = db.query(Document).filter(Document.status == "COMPLETED")
+        docs_query = db.query(Document)
         if document_id is not None:
             docs_query = docs_query.filter(Document.id == document_id)
         all_docs = docs_query.order_by(Document.id.desc()).all()
 
-        if self.vector_index.total_chunks == 0 and all_docs:
+        if all_docs:
             self.vector_index.build_from_documents(all_docs)
 
         # 2. Semantic Chunk Retrieval
-        retrieved_chunks: List[RAGChunkResult] = []
-        if retrieval_mode in ("DOCUMENT", "HYBRID", "EMISSIONS", "TREND", "RECOMMENDATION", "METRIC", "ATTENTION", "MISSING_DATA", "GENERAL"):
-            retrieved_chunks = self.vector_index.search(clean_query, top_k=5, document_id=document_id)
+        retrieved_chunks: List[RAGChunkResult] = self.vector_index.search(clean_query, top_k=5, document_id=document_id)
 
         # 3. Authoritative Structured Metric Retrieval
         metrics_query = db.query(SustainabilityMetric, Document).join(
