@@ -32,6 +32,7 @@ CRITICAL NON-HALLUCINATION & FACTUAL GROUNDING RULES:
    **SOURCE:** (document reference)
 8. UNKNOWN / UNAVAILABLE DATA: If information is not present in the RAG Context (e.g., unrecorded water consumption), clearly state: "The available documents do not contain a verified [metric] value." Do NOT claim unavailable metrics are 0.
 9. SOURCE CITATIONS: Cite verified sources using the provided tags (e.g. [SRC-1], [SRC-2]). Do not invent source tags or IDs.
+10. REPORTING PERIOD & TEMPORAL QUESTIONS: If the user asks what reporting period, billing period, month, or date data belongs to (e.g., 'What reporting period does this electricity data belong to?', 'Which month is this electricity consumption from?'), prioritize stating the reporting_period / period (e.g. 'The electricity data belongs to the October 2024 reporting period.') rather than repeating the metric value and unit. If the reporting period is unavailable in the data, state: 'The reporting period is not available in the available document data.' Do not invent or assume dates.
 
 OUTPUT FORMAT:
 Return a valid JSON object matching:
@@ -92,7 +93,7 @@ class CopilotLLMService:
                 logger.warning(f"OpenAI Copilot call failed ({e}). Falling back to deterministic grounding.")
 
         # 2. Deterministic Grounded Engine (Always reliable, non-hallucinating, and zero-cost)
-        return self._generate_deterministic_response(context, source_map, recs, document_id=document_id)
+        return self._generate_deterministic_response(context, source_map, recs, document_id=document_id, history=history)
 
     def _call_openai(
         self,
@@ -180,7 +181,8 @@ class CopilotLLMService:
         context: Union[CopilotContext, RAGContext],
         source_map: Dict[str, SourceContext],
         recommendations: Optional[List[RecommendationItem]] = None,
-        document_id: Optional[int] = None
+        document_id: Optional[int] = None,
+        history: Optional[List[Dict[str, str]]] = None
     ) -> CopilotResponse:
         """
         Deterministic, factual grounding generator.
@@ -193,7 +195,7 @@ class CopilotLLMService:
         actions = self._build_default_actions(context)
         recs = recommendations or []
         rag_metrics = getattr(context, "rag_metrics", [])
-        combined_metrics = rag_metrics if rag_metrics else context.metrics
+        combined_metrics = rag_metrics if rag_metrics else getattr(context, "metrics", [])
 
         is_emissions_reduction = (
             any(k in q_lower for k in ["reduce", "reduction", "lower", "lowering", "decrease", "cut", "mitigate", "minimize"]) and
@@ -204,10 +206,75 @@ class CopilotLLMService:
         ])
         is_recommendation = any(k in q_lower for k in ["focus on first", "focus first", "what should i focus", "recommendation", "recommendations", "priority", "next steps"])
 
+        is_period_query = (
+            intent == "REPORTING_PERIOD" or
+            any(p in q_lower for p in [
+                "reporting period", "billing period", "which month", "what month",
+                "which period", "what period", "when was this", "when was the",
+                "period does", "period belong to", "date belong to", "month is this",
+                "month does this", "billing cycle", "when was this measurement",
+                "when was this reported", "measurement recorded", "recorded date"
+            ])
+        )
+
         # Document-scoped grounded answering when document_id is provided
         if document_id is not None and context.documents:
             doc = context.documents[0]
-            if any(k in q_lower for k in ["summarize", "summary", "overview", "what is this document", "about this document"]):
+            if is_period_query:
+                matched_metric = None
+                if any(k in q_lower for k in ["peak", "demand"]):
+                    matched_metric = next((m for m in combined_metrics if "peak" in m.metric_type.lower() or "demand" in m.metric_type.lower()), None)
+                elif any(k in q_lower for k in ["electricity", "power", "grid", "kwh"]):
+                    matched_metric = next((m for m in combined_metrics if "electricity" in m.metric_type.lower() or "kwh" in (getattr(m, "unit", "") or "").lower()), None)
+                elif any(k in q_lower for k in ["fuel", "diesel", "generator"]):
+                    matched_metric = next((m for m in combined_metrics if "fuel" in m.metric_type.lower() or "diesel" in m.metric_type.lower()), None)
+                elif any(k in q_lower for k in ["emission", "emissions", "carbon", "ghg"]):
+                    matched_metric = next((m for m in combined_metrics if "emission" in m.metric_type.lower() or "ghg" in m.metric_type.lower()), None)
+                elif any(k in q_lower for k in ["water"]):
+                    matched_metric = next((m for m in combined_metrics if "water" in m.metric_type.lower()), None)
+                elif any(k in q_lower for k in ["waste"]):
+                    matched_metric = next((m for m in combined_metrics if "waste" in m.metric_type.lower()), None)
+
+                if not matched_metric:
+                    for token in q_lower.replace(",", "").split():
+                        try:
+                            token_val = float(token)
+                            matched_metric = next((m for m in combined_metrics if abs(float(m.value) - token_val) < 0.01), None)
+                            if matched_metric:
+                                break
+                        except ValueError:
+                            pass
+
+                if not matched_metric and history:
+                    last_turns = " ".join(turn.get("content", "").lower() for turn in history[-3:])
+                    if any(k in last_turns for k in ["electricity", "kwh"]):
+                        matched_metric = next((m for m in combined_metrics if "electricity" in m.metric_type.lower() or "kwh" in (getattr(m, "unit", "") or "").lower()), None)
+                    elif any(k in last_turns for k in ["peak", "demand"]):
+                        matched_metric = next((m for m in combined_metrics if "peak" in m.metric_type.lower() or "demand" in m.metric_type.lower()), None)
+                    elif any(k in last_turns for k in ["fuel", "diesel"]):
+                        matched_metric = next((m for m in combined_metrics if "fuel" in m.metric_type.lower() or "diesel" in m.metric_type.lower()), None)
+
+                period_val = None
+                if matched_metric and getattr(matched_metric, "period", None):
+                    period_val = matched_metric.period
+                elif doc.reporting_period:
+                    period_val = doc.reporting_period
+                elif combined_metrics and getattr(combined_metrics[0], "period", None):
+                    period_val = combined_metrics[0].period
+
+                if period_val:
+                    if matched_metric and ("electricity" in matched_metric.metric_type.lower() or "kwh" in (getattr(matched_metric, "unit", "") or "").lower()):
+                        answer = f"The electricity data belongs to the {period_val} reporting period."
+                    elif matched_metric and ("peak" in matched_metric.metric_type.lower() or "demand" in matched_metric.metric_type.lower()):
+                        answer = f"The peak demand data belongs to the {period_val} reporting period."
+                    elif matched_metric:
+                        m_label = getattr(matched_metric, "metric_name", matched_metric.metric_type.replace("_", " ").title())
+                        answer = f"The {m_label.lower()} data belongs to the {period_val} reporting period."
+                    else:
+                        answer = f"This data belongs to the {period_val} reporting period."
+                else:
+                    answer = "The reporting period is not available in the available document data."
+            elif any(k in q_lower for k in ["summarize", "summary", "overview", "what is this document", "about this document"]):
                 lines = [
                     f"**Document Summary: {doc.filename}**",
                     f"• **Company:** {doc.company_name or 'Not identified'}",
@@ -326,7 +393,69 @@ class CopilotLLMService:
                     lines.append(f"{idx}. **{r.filename}** (Quality: {int(r.quality_score)}/100)\n   Reason: {r.reason}")
                 answer = "\n".join(lines)
 
-        # 3. METRIC_QUERY / METRIC
+        # 3. REPORTING_PERIOD / TEMPORAL
+        elif intent == "REPORTING_PERIOD" or is_period_query:
+            matched_metric = None
+            if any(k in q_lower for k in ["peak", "demand"]):
+                matched_metric = next((m for m in combined_metrics if "peak" in m.metric_type.lower() or "demand" in m.metric_type.lower()), None)
+            elif any(k in q_lower for k in ["electricity", "power", "grid", "kwh"]):
+                matched_metric = next((m for m in combined_metrics if "electricity" in m.metric_type.lower() or "kwh" in (getattr(m, "unit", "") or "").lower()), None)
+            elif any(k in q_lower for k in ["fuel", "diesel", "generator"]):
+                matched_metric = next((m for m in combined_metrics if "fuel" in m.metric_type.lower() or "diesel" in m.metric_type.lower()), None)
+            elif any(k in q_lower for k in ["emission", "emissions", "carbon", "ghg"]):
+                matched_metric = next((m for m in combined_metrics if "emission" in m.metric_type.lower() or "ghg" in m.metric_type.lower()), None)
+            elif any(k in q_lower for k in ["water"]):
+                matched_metric = next((m for m in combined_metrics if "water" in m.metric_type.lower()), None)
+            elif any(k in q_lower for k in ["waste"]):
+                matched_metric = next((m for m in combined_metrics if "waste" in m.metric_type.lower()), None)
+
+            if not matched_metric:
+                for token in q_lower.replace(",", "").split():
+                    try:
+                        token_val = float(token)
+                        matched_metric = next((m for m in combined_metrics if abs(float(m.value) - token_val) < 0.01), None)
+                        if matched_metric:
+                            break
+                    except ValueError:
+                        pass
+
+            if not matched_metric and history:
+                last_turns = " ".join(turn.get("content", "").lower() for turn in history[-3:])
+                if any(k in last_turns for k in ["electricity", "kwh"]):
+                    matched_metric = next((m for m in combined_metrics if "electricity" in m.metric_type.lower() or "kwh" in (getattr(m, "unit", "") or "").lower()), None)
+                elif any(k in last_turns for k in ["peak", "demand"]):
+                    matched_metric = next((m for m in combined_metrics if "peak" in m.metric_type.lower() or "demand" in m.metric_type.lower()), None)
+                elif any(k in last_turns for k in ["fuel", "diesel"]):
+                    matched_metric = next((m for m in combined_metrics if "fuel" in m.metric_type.lower() or "diesel" in m.metric_type.lower()), None)
+
+            target_m = matched_metric or (combined_metrics[0] if combined_metrics else None)
+            period_val = None
+            if target_m and getattr(target_m, "period", None):
+                period_val = target_m.period
+            elif context.documents and context.documents[0].reporting_period:
+                period_val = context.documents[0].reporting_period
+
+            if period_val:
+                src_name = getattr(target_m, "document_name", None) if target_m else None
+                if not src_name and context.documents:
+                    src_name = context.documents[0].filename
+
+                if target_m and ("electricity" in target_m.metric_type.lower() or "kwh" in (getattr(target_m, "unit", "") or "").lower()):
+                    answer = f"The electricity data belongs to the {period_val} reporting period."
+                elif target_m and ("peak" in target_m.metric_type.lower() or "demand" in target_m.metric_type.lower()):
+                    answer = f"The peak demand data belongs to the {period_val} reporting period."
+                elif target_m:
+                    m_label = getattr(target_m, "metric_name", target_m.metric_type.replace("_", " ").title())
+                    answer = f"The {m_label.lower()} data belongs to the {period_val} reporting period."
+                else:
+                    answer = f"This data belongs to the {period_val} reporting period."
+
+                if src_name:
+                    answer += f"\n\nSource: {src_name}."
+            else:
+                answer = "The reporting period is not available in the available document data."
+
+        # 4. METRIC_QUERY / METRIC
         elif intent in ("METRIC_QUERY", "METRIC"):
             if not combined_metrics:
                 if any(k in q_lower for k in ["water", "freshwater"]):

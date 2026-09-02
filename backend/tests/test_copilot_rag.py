@@ -749,3 +749,111 @@ def test_46_speculative_reduction_percentage_defense():
     assert "predictive" in res.answer.lower() or "verified" in res.answer.lower() or "don't have" in res.answer.lower() or "do not have" in res.answer.lower() or "what:" in res.answer.lower()
 
 
+def test_47_reporting_period_electricity_query():
+    """47. Regression test: 'What reporting period does this electricity data belong to?' returns October 2024."""
+    from backend.app.database.session import SessionLocal
+    from backend.app.services.copilot_service import copilot_service
+
+    db = SessionLocal()
+    res = copilot_service.chat(db, "What reporting period does this electricity data belong to?", document_id=1)
+
+    assert "October 2024" in res.answer
+    assert "48,750" not in res.answer
+
+
+def test_48_reporting_period_month_query():
+    """48. Regression test: 'Which month is this electricity consumption from?' returns October 2024."""
+    from backend.app.database.session import SessionLocal
+    from backend.app.services.copilot_service import copilot_service
+
+    db = SessionLocal()
+    res = copilot_service.chat(db, "Which month is this electricity consumption from?", document_id=1)
+
+    assert "October 2024" in res.answer
+
+
+def test_49_reporting_period_peak_demand_query():
+    """49. Regression test: 'What reporting period does the peak demand belong to?' returns October 2024."""
+    from backend.app.database.session import SessionLocal
+    from backend.app.services.copilot_service import copilot_service
+
+    db = SessionLocal()
+    res = copilot_service.chat(db, "What reporting period does the peak demand belong to?", document_id=1)
+
+    assert "October 2024" in res.answer
+
+
+def test_50_metric_queries_preserved():
+    """50. Regression test: 'What is the electricity consumption?' and 'What is the peak demand?' preserve metric values."""
+    from backend.app.database.session import SessionLocal
+    from backend.app.services.copilot_service import copilot_service
+
+    db = SessionLocal()
+    res_elec = copilot_service.chat(db, "What is the electricity consumption?", document_id=1)
+    assert "48,750" in res_elec.answer or "48750" in res_elec.answer
+    assert "kWh" in res_elec.answer
+
+    res_peak = copilot_service.chat(db, "What is the peak demand?", document_id=1)
+    assert "128.5" in res_peak.answer
+    assert "kVA" in res_peak.answer
+
+
+def test_51_follow_up_reporting_period_context():
+    """51. Regression test: Multi-turn Q1 ('What is our electricity consumption?') -> Q2 ('What reporting period does this belong to?') returns October 2024."""
+    from backend.app.database.session import SessionLocal
+    from backend.app.services.copilot_service import copilot_service
+
+    db = SessionLocal()
+    history = [
+        {"role": "user", "content": "What is our electricity consumption?"},
+        {"role": "assistant", "content": "The document reports 48,750 kWh of grid electricity consumption."}
+    ]
+    res = copilot_service.chat(db, "What reporting period does this belong to?", history=history, document_id=1)
+
+    assert "October 2024" in res.answer
+    assert "48,750" not in res.answer
+
+
+def test_52_temporal_query_variations():
+    """52. Regression test: Temporal variations (when reported, period for figure, billing period) correctly resolve reporting period."""
+    from backend.app.database.session import SessionLocal
+    from backend.app.services.copilot_service import copilot_service
+
+    db = SessionLocal()
+    res1 = copilot_service.chat(db, "When was this electricity data reported?", document_id=1)
+    assert "October 2024" in res1.answer
+
+    res2 = copilot_service.chat(db, "What period does the 48,750 kWh figure belong to?", document_id=1)
+    assert "October 2024" in res2.answer
+
+    res3 = copilot_service.chat(db, "Which billing period is associated with the electricity consumption?", document_id=1)
+    assert "October 2024" in res3.answer
+
+    res4 = copilot_service.chat(db, "When was this measurement recorded?", document_id=1)
+    assert "October 2024" in res4.answer
+
+
+def test_53_reporting_period_unavailable_fallback():
+    """53. Regression test: Grounded fallback when reporting period is unavailable."""
+    from backend.app.schemas.copilot import RAGContext, CopilotSummary
+    from backend.app.services.copilot_llm import copilot_llm_service
+
+    ctx = RAGContext(
+        query="What reporting period does this fuel data belong to?",
+        intent="REPORTING_PERIOD",
+        retrieval_mode="REPORTING_PERIOD",
+        chunks=[],
+        rag_metrics=[],
+        sources=[],
+        insights=[],
+        recommendations=[],
+        attention_items=[],
+        review_items=[],
+        documents=[],
+        summary=CopilotSummary(document_count=0, documents_needing_review=0, verified_documents=0, metric_count=0, active_attention_items=0)
+    )
+    res = copilot_llm_service.generate_response(ctx)
+    assert res.answer == "The reporting period is not available in the available document data."
+
+
+

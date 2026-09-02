@@ -2,6 +2,7 @@ import os
 import json
 import re
 import logging
+from datetime import datetime
 from typing import Dict, Any, Optional, List
 from openai import OpenAI
 
@@ -518,11 +519,25 @@ class LLMService:
 
         # 3. Period & Dates
         billing_month = None
-        month_match = re.search(r'(?:billing month|billing period|reporting period|month|period)\s*[:\-]?\s*([A-Za-z]+\s*20\d{2}|FY\s*20\d{2}-\d{2,4}|Q[1-4]\s*20\d{2}|\d{4}-\d{2}-\d{2}\s*(?:to|-)\s*\d{4}-\d{2}-\d{2})', text, re.IGNORECASE)
+        month_match = re.search(
+            r'(?:billing month|billing period|reporting period|month|period)\s*[:\-]?\s*([A-Za-z]+\s*20\d{2}|FY\s*20\d{2}-\d{2,4}|Q[1-4]\s*20\d{2}|\d{1,2}[-/][A-Za-z]{3,}[-/]\d{4}\s*(?:to|-)\s*\d{1,2}[-/][A-Za-z]{3,}[-/]\d{4}|\d{4}-\d{2}-\d{2}\s*(?:to|-)\s*\d{4}-\d{2}-\d{2})',
+            text,
+            re.IGNORECASE
+        )
         if not month_match:
             month_match = re.search(r'(\bFY\s*20\d{2}-\d{2,4}\b)', text, re.IGNORECASE)
         if month_match:
-            billing_month = month_match.group(1).strip()
+            raw_period_val = month_match.group(1).strip()
+            dm = re.search(r'(\d{1,2})[-/]([A-Za-z]{3,})[-/](\d{4})', raw_period_val)
+            if dm:
+                try:
+                    dt = datetime.strptime(f"{dm.group(1)}-{dm.group(2)}-{dm.group(3)}", "%d-%b-%Y")
+                    billing_month = dt.strftime("%B %Y")
+                except Exception:
+                    billing_month = raw_period_val
+            else:
+                billing_month = raw_period_val
+
             evidence_list.append({
                 "field": "billing_period",
                 "value": billing_month,
@@ -536,12 +551,25 @@ class LLMService:
 
         start_date = None
         end_date = None
-        period_range_match = re.search(r'(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})\s*(?:to|-)\s*(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})', text)
+        period_range_match = re.search(
+            r'(\d{1,2}[-/][A-Za-z]{3,}[-/]\d{4}|\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})\s*(?:to|-)\s*(\d{1,2}[-/][A-Za-z]{3,}[-/]\d{4}|\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})',
+            text,
+            re.IGNORECASE
+        )
         if period_range_match:
             start_date = period_range_match.group(1)
             end_date = period_range_match.group(2)
             if not billing_month:
-                billing_month = f"{start_date} to {end_date}"
+                dm = re.search(r'(\d{1,2})[-/]([A-Za-z]{3,})[-/](\d{4})', start_date)
+                if dm:
+                    try:
+                        dt = datetime.strptime(f"{dm.group(1)}-{dm.group(2)}-{dm.group(3)}", "%d-%b-%Y")
+                        billing_month = dt.strftime("%B %Y")
+                    except Exception:
+                        billing_month = f"{start_date} to {end_date}"
+                else:
+                    billing_month = f"{start_date} to {end_date}"
+
                 evidence_list.append({
                     "field": "billing_period",
                     "value": billing_month,
@@ -554,7 +582,11 @@ class LLMService:
                 })
 
         issue_date = None
-        issue_match = re.search(r'(?:issue date|invoice date|date of dispatch|bill date|date)\s*[:\-]\s*(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})', text, re.IGNORECASE)
+        issue_match = re.search(
+            r'(?:issue date|invoice date|date of dispatch|bill date|date)\s*[:\-]?\s*(\d{1,2}[-/][A-Za-z]{3,}[-/]\d{4}|\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})',
+            text,
+            re.IGNORECASE
+        )
         if issue_match:
             issue_date = issue_match.group(1)
 

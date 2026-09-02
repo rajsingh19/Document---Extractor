@@ -546,7 +546,21 @@ class CopilotRAGRouter:
         if hist_text and any(k in q for k in ["previous", "prior", "last month", "change", "compared"]):
             return "TREND_ANALYSIS"
 
-        # 5. METRIC QUERY
+        # 5. REPORTING PERIOD / TEMPORAL QUERY
+        period_phrases = [
+            "reporting period", "billing period", "which month", "what month",
+            "which period", "what period", "when was this", "when was the",
+            "period does", "period belong to", "date belong to", "month is this",
+            "month does this", "billing cycle", "when was this measurement",
+            "when was this reported", "measurement recorded", "recorded date"
+        ]
+        if any(p in q for p in period_phrases):
+            return "REPORTING_PERIOD"
+        if hist_text and any(p in q for p in ["period", "month", "when was this", "when was it", "what date", "which date", "belong to"]):
+            if any(w in q for w in ["what", "which", "when", "does"]):
+                return "REPORTING_PERIOD"
+
+        # 6. METRIC QUERY
         metric_keywords = ["peak demand", "electricity consumption", "fuel consumption", "water consumption", "scope 1", "scope 2", "total ghg", "active energy", "payable amount", "how much electricity", "how much fuel"]
         if any(k in q for k in metric_keywords) or (any(w in q for w in ["what is", "how much", "show", "tell me"]) and any(w in q for w in ["demand", "consumption", "emissions", "usage", "cost", "payable"])):
             return "METRIC_QUERY"
@@ -628,7 +642,7 @@ class CopilotHybridRetriever:
                     category=m.category,
                     value=m.value,
                     unit=m.unit,
-                    period=m.period_end or m.period_start or doc.reporting_period,
+                    period=doc.reporting_period or m.period_end or m.period_start,
                     document_id=m.document_id,
                     document_name=doc.original_filename or doc.filename,
                     source_field=m.source_field,
@@ -766,7 +780,7 @@ class CopilotHybridRetriever:
             return m.category == "carbon" or m.metric_type in (
                 "scope_1_emissions", "scope_2_emissions", "total_ghg_emissions", "electricity_consumption"
             )
-        if mode == "METRIC":
+        if mode in ("METRIC", "METRIC_QUERY", "REPORTING_PERIOD"):
             q_lower = query.lower()
             q_words = [w.strip("?,.!") for w in q_lower.split() if len(w.strip("?,.!")) > 2]
             m_parts = m.metric_type.lower().split("_")
@@ -774,7 +788,18 @@ class CopilotHybridRetriever:
             domain_kw = any(kw in q_lower and kw in m.metric_type.lower() for kw in [
                 "electricity", "fuel", "diesel", "water", "peak", "demand", "waste", "renewable", "solar", "emission", "scope"
             ])
-            return word_match or domain_kw
+            val_match = False
+            for token in q_lower.replace(",", "").split():
+                try:
+                    if abs(float(token) - float(m.value)) < 0.01:
+                        val_match = True
+                        break
+                except ValueError:
+                    pass
+            has_metric_kw = any(kw in q_lower for kw in ["electricity", "fuel", "diesel", "water", "peak", "demand", "waste", "renewable", "solar", "emission", "scope", "kwh", "kva"])
+            if not has_metric_kw and not val_match:
+                return True
+            return word_match or domain_kw or val_match
         return True
 
 
