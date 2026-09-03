@@ -39,6 +39,8 @@ def init_db():
     from backend.app.models.activity_data import ActivityData  # noqa: F401
     from backend.app.models.carbon_calculation import CarbonCalculation  # noqa: F401
     from backend.app.models.carbon_ledger import CarbonLedgerEntry  # noqa: F401
+    from backend.app.models.reduction_opportunity import ReductionOpportunity  # noqa: F401
+    from backend.app.models.reduction_project import ReductionProject, ReductionProjectEvent  # noqa: F401
     Base.metadata.create_all(bind=engine)
     
     # Auto-migration for SQLite columns added in Step 3
@@ -197,8 +199,10 @@ def init_db():
             # 5. Synchronize carbon calculations & accounting ledger for Document #1 (Step 13 & 14)
             from backend.app.services.carbon_calculation import carbon_calculation_engine
             from backend.app.services.carbon_ledger import carbon_ledger_service
+            from backend.app.services.reduction_opportunity import reduction_opportunity_service
             carbon_calculation_engine.calculate_document_emissions(db_session, 1)
             carbon_ledger_service.post_document(db_session, 1)
+            reduction_opportunity_service.generate_opportunities(db_session)
 
             db_session.commit()
     except Exception as e:

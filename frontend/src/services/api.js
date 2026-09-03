@@ -318,6 +318,65 @@ export const getCarbonDashboardReconciliation = async (params = {}) => {
   return response.data;
 };
 
+// --- Carbon Reduction Opportunities API Methods (Step 16) ---
+
+export const getReductionOpportunities = async (params = {}) => {
+  const response = await api.get('/reduction-opportunities', { params });
+  return response.data;
+};
+
+export const getReductionOpportunity = async (id) => {
+  const response = await api.get(`/reduction-opportunities/${id}`);
+  return response.data;
+};
+
+export const getReductionOpportunitySummary = async () => {
+  const response = await api.get('/reduction-opportunities/summary');
+  return response.data;
+};
+
+export const generateReductionOpportunities = async (params = {}) => {
+  const response = await api.post('/reduction-opportunities/generate', null, { params });
+  return response.data;
+};
+
+export const updateReductionOpportunityStatus = async (id, status, note = null) => {
+  const response = await api.post(`/reduction-opportunities/${id}/status`, { status, note });
+  return response.data;
+};
+
+export const createProjectFromOpportunity = async (opportunityId, customData = {}) => {
+  const response = await api.post(`/reduction-opportunities/${opportunityId}/create-project`, customData);
+  return response.data;
+};
+
+// --- Carbon Reduction Projects API Methods (Step 16) ---
+
+export const getReductionProjects = async (params = {}) => {
+  const response = await api.get('/reduction-projects', { params });
+  return response.data;
+};
+
+export const getReductionProject = async (id) => {
+  const response = await api.get(`/reduction-projects/${id}`);
+  return response.data;
+};
+
+export const createReductionProject = async (data) => {
+  const response = await api.post('/reduction-projects', data);
+  return response.data;
+};
+
+export const updateReductionProject = async (id, data) => {
+  const response = await api.patch(`/reduction-projects/${id}`, data);
+  return response.data;
+};
+
+export const updateReductionProjectStatus = async (id, status, note = null) => {
+  const response = await api.post(`/reduction-projects/${id}/status`, { status, note });
+  return response.data;
+};
+
 export default api;
 
 

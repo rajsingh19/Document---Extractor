@@ -22,7 +22,8 @@ import {
   Scale,
   Check,
   Archive,
-  BarChart3
+  BarChart3,
+  Lightbulb
 } from 'lucide-react';
 import ExtractionTable from '../components/ExtractionTable';
 import EvidenceSection from '../components/EvidenceSection';
@@ -39,7 +40,8 @@ import {
   calculateDocumentCarbonEmissions,
   getDocumentCarbonLedger,
   postDocumentCarbonLedger,
-  getDocumentCarbonReconciliation
+  getDocumentCarbonReconciliation,
+  getReductionOpportunities
 } from '../services/api';
 
 export default function DocumentDetail({
@@ -81,16 +83,20 @@ export default function DocumentDetail({
     }
   };
 
+  const [docOpportunities, setDocOpportunities] = useState([]);
+
   const loadLedgerAndReconciliation = async (id) => {
     try {
-      const [ledData, reconData] = await Promise.all([
+      const [ledData, reconData, oppsData] = await Promise.all([
         getDocumentCarbonLedger(id).catch(() => null),
         getDocumentCarbonReconciliation(id).catch(() => null),
+        getReductionOpportunities({ document_id: id }).catch(() => null),
       ]);
       if (ledData) setLedgerSummary(ledData);
       if (reconData) setReconciliation(reconData);
+      if (oppsData) setDocOpportunities(oppsData.items || []);
     } catch (err) {
-      console.error('Failed to load ledger / reconciliation:', err);
+      console.error('Failed to load ledger / reconciliation / opportunities:', err);
     }
   };
 
@@ -1003,6 +1009,59 @@ export default function DocumentDetail({
                 </div>
               </div>
             </div>
+
+            {/* 5F. REDUCTION OPPORTUNITIES (Linked to Document) */}
+            {docOpportunities && docOpportunities.length > 0 && (
+              <div className="bg-white border border-[#E5E7EB] rounded-xl p-5 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center space-x-2">
+                    <span className="p-1 rounded-md bg-emerald-100 text-emerald-800">
+                      <Lightbulb className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                        Reduction Opportunities ({docOpportunities.length})
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        Operational investigation areas identified from this document's calculated carbon footprint.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  {docOpportunities.map((opp) => (
+                    <div key={opp.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200/80 flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                            opp.priority === 'HIGH' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                            opp.priority === 'MEDIUM' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                            'bg-blue-50 text-blue-700 border border-blue-200'
+                          }`}>
+                            {opp.priority}
+                          </span>
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-200/70 text-slate-700">
+                            {opp.category}
+                          </span>
+                          <span className="text-xs font-semibold text-slate-900">{opp.title}</span>
+                        </div>
+                        <p className="text-xs text-slate-600">{opp.description}</p>
+                      </div>
+
+                      <div className="text-right flex-shrink-0">
+                        <span className="text-xs font-bold text-slate-900 block">
+                          {opp.calculated_co2e_t !== null && opp.calculated_co2e_t !== undefined ? `${opp.calculated_co2e_t.toFixed(4)} tCO2e` : '—'}
+                        </span>
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 mt-0.5 inline-block">
+                          {opp.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* 6. SOURCE EVIDENCE ANCHORS (Top 5) */}
             <div className="bg-white border border-[#E5E7EB] rounded-xl overflow-hidden shadow-2xs">

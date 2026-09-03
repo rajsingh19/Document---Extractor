@@ -727,6 +727,67 @@ export default function CarbonDashboard({ onNavigate }) {
             Reconciliation preserves extracted values verbatim while establishing an independent, auditable accounting footprint.
           </div>
         </div>
+
+        {/* SECTION 8: REDUCTION OPPORTUNITIES (Step 16 Integration) */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 mb-4 border-b border-slate-100">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800">
+                  <Activity className="w-4 h-4" />
+                </span>
+                <h3 className="text-base font-bold text-slate-900">Reduction Opportunities</h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Deterministic operational areas identified from your calculated carbon footprint.
+              </p>
+            </div>
+            {onNavigate && (
+              <button
+                onClick={() => onNavigate('reduction-opportunities')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold rounded-lg border border-emerald-200 transition-colors"
+              >
+                <span>View all opportunities</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">HIGH PRIORITY</span>
+                <span className="text-xs font-medium text-slate-500">ENERGY</span>
+              </div>
+              <h4 className="text-sm font-semibold text-slate-900">Grid Electricity Optimization</h4>
+              <p className="text-xs text-slate-600">
+                Grid electricity is the primary calculated emission source (31.8790 tCO2e, 96.59% share).
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">MEDIUM PRIORITY</span>
+                <span className="text-xs font-medium text-slate-500">FUEL</span>
+              </div>
+              <h4 className="text-sm font-semibold text-slate-900">Stationary Diesel Combustion</h4>
+              <p className="text-xs text-slate-600">
+                Diesel fuel combustion accounts for 1.1256 tCO2e of direct Scope 1 emissions.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">HIGH PRIORITY</span>
+                <span className="text-xs font-medium text-slate-500">DATA QUALITY</span>
+              </div>
+              <h4 className="text-sm font-semibold text-slate-900">Solar Avoidance Registry Matching</h4>
+              <p className="text-xs text-slate-600">
+                3,850 kWh solar generation currently excluded from footprint totals pending factor resolution.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

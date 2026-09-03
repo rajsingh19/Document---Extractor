@@ -5,7 +5,8 @@ import hashlib
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from decimal import Decimal
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
@@ -78,6 +79,21 @@ from backend.app.schemas.carbon_dashboard import (
     CarbonDashboardResponse,
 )
 from backend.app.services.carbon_dashboard import carbon_dashboard_service
+from backend.app.schemas.reduction_opportunity import (
+    ReductionOpportunityResponse,
+    ReductionOpportunityList,
+    ReductionOpportunitySummary,
+    OpportunityStatusUpdateRequest,
+)
+from backend.app.schemas.reduction_project import (
+    ReductionProjectCreate,
+    ReductionProjectUpdate,
+    ReductionProjectStatusUpdate,
+    ReductionProjectResponse,
+    ReductionProjectList,
+)
+from backend.app.services.reduction_opportunity import reduction_opportunity_service
+from backend.app.services.reduction_project import reduction_project_service
 from backend.app.services.evidence_report import evidence_report_service
 from backend.app.services.report_pdf import report_pdf_renderer
 from backend.app.services.emission_factor_service import emission_factor_service
@@ -1520,6 +1536,234 @@ def get_carbon_dashboard_reconciliation(
     Retrieve high-level dashboard reconciliation comparing extracted document totals with calculated ledger totals.
     """
     return carbon_dashboard_service.get_reconciliation(db, document_id=document_id)
+
+
+# ==========================================
+# Deterministic Carbon Reduction Opportunities Endpoints (Step 16)
+# ==========================================
+
+@router.get("/reduction-opportunities", response_model=ReductionOpportunityList)
+def list_reduction_opportunities(
+    category: Optional[str] = Query(None, description="Filter by category"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    priority: Optional[str] = Query(None, description="Filter by priority"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    activity_type: Optional[str] = Query(None, description="Filter by activity type"),
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    List deterministic reduction opportunities identified from accounting ledger records.
+    """
+    items = reduction_opportunity_service.get_opportunities(
+        db,
+        category=category,
+        scope=scope,
+        priority=priority,
+        status=status,
+        activity_type=activity_type,
+        document_id=document_id,
+    )
+    res_items = []
+    for item in items:
+        dto = ReductionOpportunityResponse.model_validate(item)
+        if item.calculated_co2e is not None:
+            dto.calculated_co2e_t = float(Decimal(str(item.calculated_co2e)) / Decimal("1000"))
+        res_items.append(dto)
+
+    return ReductionOpportunityList(total=len(res_items), items=res_items)
+
+@router.get("/reduction-opportunities/summary", response_model=ReductionOpportunitySummary)
+def get_reduction_opportunities_summary(db: Session = Depends(get_db)):
+    """
+    Get aggregated count summary of reduction opportunities.
+    """
+    return reduction_opportunity_service.get_summary(db)
+
+@router.get("/reduction-opportunities/{opportunity_id}", response_model=ReductionOpportunityResponse)
+def get_reduction_opportunity(opportunity_id: int, db: Session = Depends(get_db)):
+    """
+    Retrieve single reduction opportunity details.
+    """
+    opp = reduction_opportunity_service.get_opportunity(db, opportunity_id)
+    if not opp:
+        raise HTTPException(status_code=404, detail="Reduction opportunity not found")
+    dto = ReductionOpportunityResponse.model_validate(opp)
+    if opp.calculated_co2e is not None:
+        dto.calculated_co2e_t = float(Decimal(str(opp.calculated_co2e)) / Decimal("1000"))
+    return dto
+
+@router.post("/reduction-opportunities/generate", response_model=ReductionOpportunityList)
+def generate_reduction_opportunities(
+    document_id: Optional[int] = Query(None, description="Optional document ID filter"),
+    db: Session = Depends(get_db)
+):
+    """
+    Deterministically scan POSTED ledger records and generate/sync reduction opportunities.
+    """
+    generated = reduction_opportunity_service.generate_opportunities(db, document_id=document_id)
+    res_items = []
+    for item in generated:
+        dto = ReductionOpportunityResponse.model_validate(item)
+        if item.calculated_co2e is not None:
+            dto.calculated_co2e_t = float(Decimal(str(item.calculated_co2e)) / Decimal("1000"))
+        res_items.append(dto)
+    return ReductionOpportunityList(total=len(res_items), items=res_items)
+
+@router.post("/reduction-opportunities/{opportunity_id}/status", response_model=ReductionOpportunityResponse)
+def update_reduction_opportunity_status(
+    opportunity_id: int,
+    request: OpportunityStatusUpdateRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Update status of a reduction opportunity (OPEN, ACKNOWLEDGED, IN_PROGRESS, COMPLETED, DISMISSED).
+    """
+    try:
+        opp = reduction_opportunity_service.update_status(db, opportunity_id, request.status)
+        if not opp:
+            raise HTTPException(status_code=404, detail="Reduction opportunity not found")
+        dto = ReductionOpportunityResponse.model_validate(opp)
+        if opp.calculated_co2e is not None:
+            dto.calculated_co2e_t = float(Decimal(str(opp.calculated_co2e)) / Decimal("1000"))
+        return dto
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/reduction-opportunities/{opportunity_id}/create-project", response_model=ReductionProjectResponse)
+def create_project_from_opportunity_endpoint(
+    opportunity_id: int,
+    custom_data: Optional[Dict[str, Any]] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new ReductionProject directly linked to an opportunity.
+    """
+    try:
+        project = reduction_project_service.create_project_from_opportunity(db, opportunity_id, custom_data)
+        events = reduction_project_service.get_project_events(db, project.id)
+        dto = ReductionProjectResponse.model_validate(project)
+        dto.events = events
+        if project.baseline_co2e is not None:
+            dto.baseline_co2e_t = float(Decimal(str(project.baseline_co2e)) / Decimal("1000"))
+        if project.actual_post_project_co2e is not None:
+            dto.actual_post_project_t = float(Decimal(str(project.actual_post_project_co2e)) / Decimal("1000"))
+        return dto
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ==========================================
+# Carbon Reduction Projects Endpoints (Step 16)
+# ==========================================
+
+@router.get("/reduction-projects", response_model=ReductionProjectList)
+def list_reduction_projects(
+    category: Optional[str] = Query(None, description="Filter by category"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    opportunity_id: Optional[int] = Query(None, description="Filter by opportunity ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    List tracked carbon reduction projects.
+    """
+    projects = reduction_project_service.get_projects(
+        db, category=category, scope=scope, status=status, opportunity_id=opportunity_id
+    )
+    res_items = []
+    for p in projects:
+        events = reduction_project_service.get_project_events(db, p.id)
+        dto = ReductionProjectResponse.model_validate(p)
+        dto.events = events
+        if p.baseline_co2e is not None:
+            dto.baseline_co2e_t = float(Decimal(str(p.baseline_co2e)) / Decimal("1000"))
+        if p.actual_post_project_co2e is not None:
+            dto.actual_post_project_t = float(Decimal(str(p.actual_post_project_co2e)) / Decimal("1000"))
+        res_items.append(dto)
+
+    return ReductionProjectList(total=len(res_items), items=res_items)
+
+@router.get("/reduction-projects/{project_id}", response_model=ReductionProjectResponse)
+def get_reduction_project(project_id: int, db: Session = Depends(get_db)):
+    """
+    Retrieve single reduction project details and audit event timeline.
+    """
+    project = reduction_project_service.get_project(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Reduction project not found")
+    events = reduction_project_service.get_project_events(db, project.id)
+    dto = ReductionProjectResponse.model_validate(project)
+    dto.events = events
+    if project.baseline_co2e is not None:
+        dto.baseline_co2e_t = float(Decimal(str(project.baseline_co2e)) / Decimal("1000"))
+    if project.actual_post_project_co2e is not None:
+        dto.actual_post_project_t = float(Decimal(str(project.actual_post_project_co2e)) / Decimal("1000"))
+    return dto
+
+@router.post("/reduction-projects", response_model=ReductionProjectResponse)
+def create_reduction_project(
+    data: ReductionProjectCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new reduction project.
+    """
+    project = reduction_project_service.create_project(db, data)
+    events = reduction_project_service.get_project_events(db, project.id)
+    dto = ReductionProjectResponse.model_validate(project)
+    dto.events = events
+    if project.baseline_co2e is not None:
+        dto.baseline_co2e_t = float(Decimal(str(project.baseline_co2e)) / Decimal("1000"))
+    return dto
+
+@router.patch("/reduction-projects/{project_id}", response_model=ReductionProjectResponse)
+def update_reduction_project(
+    project_id: int,
+    data: ReductionProjectUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update reduction project details, baseline reference, user target, or notes.
+    """
+    try:
+        project = reduction_project_service.update_project(db, project_id, data)
+        if not project:
+            raise HTTPException(status_code=404, detail="Reduction project not found")
+        events = reduction_project_service.get_project_events(db, project.id)
+        dto = ReductionProjectResponse.model_validate(project)
+        dto.events = events
+        if project.baseline_co2e is not None:
+            dto.baseline_co2e_t = float(Decimal(str(project.baseline_co2e)) / Decimal("1000"))
+        if project.actual_post_project_co2e is not None:
+            dto.actual_post_project_t = float(Decimal(str(project.actual_post_project_co2e)) / Decimal("1000"))
+        return dto
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/reduction-projects/{project_id}/status", response_model=ReductionProjectResponse)
+def update_reduction_project_status(
+    project_id: int,
+    data: ReductionProjectStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update status of a reduction project (PLANNED, IN_PROGRESS, ON_HOLD, COMPLETED, CANCELLED) with audit logging.
+    """
+    try:
+        project = reduction_project_service.update_status(db, project_id, data.status, data.note)
+        if not project:
+            raise HTTPException(status_code=404, detail="Reduction project not found")
+        events = reduction_project_service.get_project_events(db, project.id)
+        dto = ReductionProjectResponse.model_validate(project)
+        dto.events = events
+        if project.baseline_co2e is not None:
+            dto.baseline_co2e_t = float(Decimal(str(project.baseline_co2e)) / Decimal("1000"))
+        if project.actual_post_project_co2e is not None:
+            dto.actual_post_project_t = float(Decimal(str(project.actual_post_project_co2e)) / Decimal("1000"))
+        return dto
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/stats", response_model=DashboardStatsResponse)
 def get_dashboard_stats(db: Session = Depends(get_db)):

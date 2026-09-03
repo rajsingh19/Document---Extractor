@@ -8,6 +8,8 @@ import ActivityDataPage from './pages/ActivityData';
 import CarbonCalculationsPage from './pages/CarbonCalculations';
 import CarbonLedger from './pages/CarbonLedger';
 import CarbonDashboard from './pages/CarbonDashboard';
+import ReductionOpportunities from './pages/ReductionOpportunities';
+import ReductionProjects from './pages/ReductionProjects';
 import Metrics from './pages/Metrics';
 import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument, getAttentionItems } from './services/api';
 
@@ -82,6 +84,20 @@ export default function App() {
 
     if (pathname === '/carbon-dashboard') {
       setActiveTab('carbon-dashboard');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      return;
+    }
+
+    if (pathname === '/reduction-opportunities') {
+      setActiveTab('reduction-opportunities');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      return;
+    }
+
+    if (pathname === '/reduction-projects') {
+      setActiveTab('reduction-projects');
       setSelectedDocument(null);
       setReportDocId(null);
       return;
@@ -277,6 +293,10 @@ export default function App() {
           <CarbonLedger />
         ) : activeTab === 'carbon-dashboard' ? (
           <CarbonDashboard onNavigate={handleSelectTab} />
+        ) : activeTab === 'reduction-opportunities' ? (
+          <ReductionOpportunities />
+        ) : activeTab === 'reduction-projects' ? (
+          <ReductionProjects />
         ) : activeTab === 'metrics' ? (
           <Metrics
             stats={stats}

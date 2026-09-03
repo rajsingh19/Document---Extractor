@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, BarChart3, Activity, X, ShieldCheck, Database, Cpu, Sparkles, Layers, Calculator, BookOpen } from 'lucide-react';
+import { FileText, BarChart3, Activity, X, ShieldCheck, Database, Cpu, Sparkles, Layers, Calculator, BookOpen, Lightbulb, FolderKanban } from 'lucide-react';
 
 export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, isSeeding }) {
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -73,6 +73,42 @@ export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, i
               </button>
 
               <button
+                onClick={() => onSelectTab('carbon-dashboard')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'carbon-dashboard'
+                    ? 'bg-[#EAF7F2] text-[#0F6B56]'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>Carbon Footprint</span>
+              </button>
+
+              <button
+                onClick={() => onSelectTab('reduction-opportunities')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'reduction-opportunities'
+                    ? 'bg-[#EAF7F2] text-[#0F6B56]'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Lightbulb className="w-3.5 h-3.5" />
+                <span>Opportunities</span>
+              </button>
+
+              <button
+                onClick={() => onSelectTab('reduction-projects')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'reduction-projects'
+                    ? 'bg-[#EAF7F2] text-[#0F6B56]'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <FolderKanban className="w-3.5 h-3.5" />
+                <span>Projects</span>
+              </button>
+
+              <button
                 onClick={() => onSelectTab('carbon-calculations')}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
                   activeTab === 'carbon-calculations'
@@ -93,19 +129,7 @@ export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, i
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5" />
-                <span>Carbon Ledger</span>
-              </button>
-
-              <button
-                onClick={() => onSelectTab('carbon-dashboard')}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
-                  activeTab === 'carbon-dashboard'
-                    ? 'bg-[#EAF7F2] text-[#0F6B56]'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <BarChart3 className="w-3.5 h-3.5" />
-                <span>Carbon Footprint</span>
+                <span>Ledger</span>
               </button>
             </nav>
           </div>
