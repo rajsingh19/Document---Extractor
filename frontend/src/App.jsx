@@ -10,13 +10,16 @@ import CarbonLedger from './pages/CarbonLedger';
 import CarbonDashboard from './pages/CarbonDashboard';
 import ReductionOpportunities from './pages/ReductionOpportunities';
 import ReductionProjects from './pages/ReductionProjects';
+import ComplianceReports from './pages/ComplianceReports';
+import ComplianceReportDetail from './pages/ComplianceReportDetail';
 import Metrics from './pages/Metrics';
 import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument, getAttentionItems } from './services/api';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('documents'); // 'documents' | 'metrics' | 'emission-factors' | 'carbon-ledger'
+  const [activeTab, setActiveTab] = useState('documents'); // 'documents' | 'metrics' | 'emission-factors' | 'carbon-ledger' | 'compliance-reports'
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [reportDocId, setReportDocId] = useState(null);
+  const [complianceReportId, setComplianceReportId] = useState(null);
   const [health, setHealth] = useState(null);
   const [stats, setStats] = useState(null);
   const [documents, setDocuments] = useState([]);
@@ -100,6 +103,25 @@ export default function App() {
       setActiveTab('reduction-projects');
       setSelectedDocument(null);
       setReportDocId(null);
+      setComplianceReportId(null);
+      return;
+    }
+
+    const compMatch = pathname.match(/^\/compliance-reports\/(\d+)$/);
+    if (compMatch) {
+      const cId = parseInt(compMatch[1], 10);
+      setComplianceReportId(cId);
+      setActiveTab('compliance-report-detail');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      return;
+    }
+
+    if (pathname === '/compliance-reports') {
+      setActiveTab('compliance-reports');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      setComplianceReportId(null);
       return;
     }
 
@@ -107,6 +129,7 @@ export default function App() {
       setActiveTab('metrics');
       setSelectedDocument(null);
       setReportDocId(null);
+      setComplianceReportId(null);
       return;
     }
 
@@ -297,6 +320,28 @@ export default function App() {
           <ReductionOpportunities />
         ) : activeTab === 'reduction-projects' ? (
           <ReductionProjects />
+        ) : activeTab === 'compliance-reports' ? (
+          <ComplianceReports
+            onNavigate={(tab, repId) => {
+              if (repId) {
+                setComplianceReportId(repId);
+                setActiveTab('compliance-report-detail');
+                window.history.pushState(null, '', `/compliance-reports/${repId}`);
+              } else {
+                setActiveTab(tab);
+                window.history.pushState(null, '', `/${tab}`);
+              }
+            }}
+          />
+        ) : activeTab === 'compliance-report-detail' ? (
+          <ComplianceReportDetail
+            reportId={complianceReportId}
+            onNavigate={(tab) => {
+              setActiveTab('compliance-reports');
+              setComplianceReportId(null);
+              window.history.pushState(null, '', '/compliance-reports');
+            }}
+          />
         ) : activeTab === 'metrics' ? (
           <Metrics
             stats={stats}

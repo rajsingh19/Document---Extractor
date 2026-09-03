@@ -106,6 +106,16 @@ from backend.app.schemas.verification_record import (
     VerificationRecordResponse,
 )
 from backend.app.services.reduction_measurement import reduction_measurement_service
+from backend.app.schemas.compliance_report import (
+    ComplianceReportCreate,
+    ComplianceReportStatusUpdate,
+    ComplianceDisclosureUserUpdate,
+    ComplianceReportResponse,
+    ComplianceReportList,
+)
+from backend.app.services.compliance_frameworks import compliance_framework_service
+from backend.app.services.compliance_report import compliance_report_service
+from backend.app.services.compliance_report_pdf import compliance_pdf_renderer
 from backend.app.services.evidence_report import evidence_report_service
 from backend.app.services.report_pdf import report_pdf_renderer
 from backend.app.services.emission_factor_service import emission_factor_service
@@ -1985,6 +1995,185 @@ def update_verification_status_endpoint(
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# ------------------------------------------------------------------
+# STEP 18 — COMPLIANCE & SUSTAINABILITY REPORT BUILDER ENDPOINTS
+# ------------------------------------------------------------------
+
+@router.get("/compliance-frameworks")
+def list_compliance_frameworks_endpoint():
+    """
+    List all supported framework definitions (GHG_PROTOCOL, BRSR, GRI, CBAM).
+    """
+    return compliance_framework_service.get_supported_frameworks()
+
+
+@router.get("/compliance-frameworks/{framework}")
+def get_compliance_framework_endpoint(framework: str):
+    """
+    Get detailed disclosure specification for a framework.
+    """
+    try:
+        return compliance_framework_service.get_framework(framework)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/compliance-reports")
+def create_compliance_report_endpoint(
+    data: ComplianceReportCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new draft ComplianceReport.
+    """
+    try:
+        report = compliance_report_service.create_report(db, data)
+        return compliance_report_service.build_report_dto(db, report)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/compliance-reports")
+def list_compliance_reports_endpoint(
+    framework: Optional[str] = Query(None),
+    reporting_period: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    List compliance reports with optional filters.
+    """
+    reports = compliance_report_service.get_reports(db, framework, reporting_period, status)
+    items = [compliance_report_service.build_report_dto(db, r) for r in reports]
+    return {"total": len(items), "items": items}
+
+
+@router.get("/compliance-reports/{report_id}")
+def get_compliance_report_endpoint(
+    report_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed compliance report with sections, disclosures, and audit history.
+    """
+    report = compliance_report_service.get_report(db, report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Compliance report not found")
+    return compliance_report_service.build_report_dto(db, report)
+
+
+@router.post("/compliance-reports/{report_id}/generate")
+def generate_compliance_report_endpoint(
+    report_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Deterministically populate report disclosures from CarbonLedgerEntry, ActivityData, and SustainabilityMetric records.
+    """
+    try:
+        report = compliance_report_service.generate_report_content(db, report_id)
+        return compliance_report_service.build_report_dto(db, report)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/compliance-reports/{report_id}/status")
+def update_compliance_report_status_endpoint(
+    report_id: int,
+    data: ComplianceReportStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update workflow status (DRAFT, GENERATED, NEEDS_REVIEW, FINALIZED).
+    """
+    try:
+        report = compliance_report_service.update_report_status(
+            db=db,
+            report_id=report_id,
+            new_status=data.status,
+            assurance_status=data.assurance_status,
+            note=data.note,
+        )
+        return compliance_report_service.build_report_dto(db, report)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/compliance-reports/{report_id}/sections")
+def get_compliance_report_sections_endpoint(
+    report_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get sections of a compliance report.
+    """
+    report = compliance_report_service.get_report(db, report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Compliance report not found")
+    dto = compliance_report_service.build_report_dto(db, report)
+    return dto.sections
+
+
+@router.get("/compliance-reports/{report_id}/disclosures")
+def get_compliance_report_disclosures_endpoint(
+    report_id: int,
+    section_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Get disclosures of a compliance report.
+    """
+    report = compliance_report_service.get_report(db, report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Compliance report not found")
+    disclosures = compliance_report_service.get_report_disclosures(db, report_id, section_id)
+    return disclosures
+
+
+@router.post("/compliance-disclosures/{disclosure_id}/user-value")
+def update_disclosure_user_value_endpoint(
+    disclosure_id: int,
+    data: ComplianceDisclosureUserUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Provide user-entered override value for a disclosure. Sets source_type to USER_PROVIDED.
+    """
+    try:
+        disc = compliance_report_service.update_disclosure_user_value(
+            db=db,
+            disclosure_id=disclosure_id,
+            user_value=data.value,
+            unit=data.value_unit,
+            notes=data.notes,
+        )
+        return disc
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/compliance-reports/{report_id}/pdf")
+def get_compliance_report_pdf_endpoint(
+    report_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Download deterministic ReportLab PDF for a compliance report.
+    """
+    report = compliance_report_service.get_report(db, report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Compliance report not found")
+
+    dto = compliance_report_service.build_report_dto(db, report)
+    pdf_bytes = compliance_pdf_renderer.render(dto)
+
+    filename = f"{report.report_code}_{report.framework}_{report.reporting_period}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 @router.get("/stats", response_model=DashboardStatsResponse)
 def get_dashboard_stats(db: Session = Depends(get_db)):

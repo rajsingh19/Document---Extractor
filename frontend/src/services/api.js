@@ -421,6 +421,72 @@ export const updateVerificationStatus = async (measurementId, data) => {
   return response.data;
 };
 
+// --- Compliance & Sustainability Report Builder API Methods (Step 18) ---
+
+export const getComplianceFrameworks = async () => {
+  const response = await api.get('/compliance-frameworks');
+  return response.data;
+};
+
+export const getComplianceFramework = async (framework) => {
+  const response = await api.get(`/compliance-frameworks/${framework}`);
+  return response.data;
+};
+
+export const createComplianceReport = async (data) => {
+  const response = await api.post('/compliance-reports', data);
+  return response.data;
+};
+
+export const getComplianceReports = async (params = {}) => {
+  const response = await api.get('/compliance-reports', { params });
+  return response.data;
+};
+
+export const getComplianceReport = async (reportId) => {
+  const response = await api.get(`/compliance-reports/${reportId}`);
+  return response.data;
+};
+
+export const generateComplianceReport = async (reportId) => {
+  const response = await api.post(`/compliance-reports/${reportId}/generate`);
+  return response.data;
+};
+
+export const updateComplianceReportStatus = async (reportId, status, assuranceStatus = null, note = null) => {
+  const response = await api.post(`/compliance-reports/${reportId}/status`, {
+    status,
+    assurance_status: assuranceStatus,
+    note
+  });
+  return response.data;
+};
+
+export const getComplianceReportSections = async (reportId) => {
+  const response = await api.get(`/compliance-reports/${reportId}/sections`);
+  return response.data;
+};
+
+export const getComplianceReportDisclosures = async (reportId, sectionId = null) => {
+  const response = await api.get(`/compliance-reports/${reportId}/disclosures`, {
+    params: sectionId ? { section_id: sectionId } : {}
+  });
+  return response.data;
+};
+
+export const updateDisclosureUserValue = async (disclosureId, value, valueUnit = null, notes = null) => {
+  const response = await api.post(`/compliance-disclosures/${disclosureId}/user-value`, {
+    value,
+    value_unit: valueUnit,
+    notes
+  });
+  return response.data;
+};
+
+export const getComplianceReportPdfUrl = (reportId) => {
+  return `/api/compliance-reports/${reportId}/pdf`;
+};
+
 export default api;
 
 
