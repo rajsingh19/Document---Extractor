@@ -65,6 +65,19 @@ from backend.app.schemas.carbon_ledger import (
     LedgerAggregationResponse,
 )
 from backend.app.services.carbon_ledger import carbon_ledger_service
+from backend.app.schemas.carbon_dashboard import (
+    CarbonDashboardSummary,
+    CarbonScopeBreakdown,
+    CarbonCategoryBreakdown,
+    CarbonActivityBreakdown,
+    CarbonDocumentContribution,
+    CarbonTrendsResponse,
+    CarbonDataCoverage,
+    CarbonTopSourcesResponse,
+    CarbonDashboardReconciliation,
+    CarbonDashboardResponse,
+)
+from backend.app.services.carbon_dashboard import carbon_dashboard_service
 from backend.app.services.evidence_report import evidence_report_service
 from backend.app.services.report_pdf import report_pdf_renderer
 from backend.app.services.emission_factor_service import emission_factor_service
@@ -1312,6 +1325,201 @@ def get_document_carbon_reconciliation(document_id: int, db: Session = Depends(g
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return carbon_ledger_service.get_document_reconciliation(db, document_id)
+
+
+# ==========================================
+# Deterministic Carbon Footprint Dashboard Endpoints (Step 15)
+# ==========================================
+
+@router.get("/carbon-dashboard", response_model=CarbonDashboardResponse)
+def get_carbon_dashboard(
+    reporting_year: Optional[int] = Query(None, description="Filter by reporting year"),
+    reporting_period: Optional[str] = Query(None, description="Filter by reporting period"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve full carbon footprint dashboard payload with KPI summaries, breakdowns, trends, coverage, and reconciliation.
+    """
+    return carbon_dashboard_service.get_full_dashboard(
+        db,
+        reporting_year=reporting_year,
+        reporting_period=reporting_period,
+        scope=scope,
+        category=category,
+        document_id=document_id,
+    )
+
+@router.get("/carbon-dashboard/summary", response_model=CarbonDashboardSummary)
+def get_carbon_dashboard_summary(
+    reporting_year: Optional[int] = Query(None, description="Filter by reporting year"),
+    reporting_period: Optional[str] = Query(None, description="Filter by reporting period"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve high-level executive carbon footprint KPI summary.
+    """
+    return carbon_dashboard_service.get_dashboard_summary(
+        db,
+        reporting_year=reporting_year,
+        reporting_period=reporting_period,
+        scope=scope,
+        category=category,
+        document_id=document_id,
+    )
+
+@router.get("/carbon-dashboard/scopes", response_model=CarbonScopeBreakdown)
+def get_carbon_dashboard_scopes(
+    reporting_year: Optional[int] = Query(None, description="Filter by reporting year"),
+    reporting_period: Optional[str] = Query(None, description="Filter by reporting period"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve Scope 1, Scope 2, Scope 3 breakdown.
+    """
+    return carbon_dashboard_service.get_scope_breakdown(
+        db,
+        reporting_year=reporting_year,
+        reporting_period=reporting_period,
+        scope=scope,
+        category=category,
+        document_id=document_id,
+    )
+
+@router.get("/carbon-dashboard/categories", response_model=CarbonCategoryBreakdown)
+def get_carbon_dashboard_categories(
+    reporting_year: Optional[int] = Query(None, description="Filter by reporting year"),
+    reporting_period: Optional[str] = Query(None, description="Filter by reporting period"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve emissions breakdown by category.
+    """
+    return carbon_dashboard_service.get_category_breakdown(
+        db,
+        reporting_year=reporting_year,
+        reporting_period=reporting_period,
+        scope=scope,
+        category=category,
+        document_id=document_id,
+    )
+
+@router.get("/carbon-dashboard/activities", response_model=CarbonActivityBreakdown)
+def get_carbon_dashboard_activities(
+    reporting_year: Optional[int] = Query(None, description="Filter by reporting year"),
+    reporting_period: Optional[str] = Query(None, description="Filter by reporting period"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve emissions breakdown by specific activity type.
+    """
+    return carbon_dashboard_service.get_activity_breakdown(
+        db,
+        reporting_year=reporting_year,
+        reporting_period=reporting_period,
+        scope=scope,
+        category=category,
+        document_id=document_id,
+    )
+
+@router.get("/carbon-dashboard/documents", response_model=CarbonDocumentContribution)
+def get_carbon_dashboard_documents(
+    reporting_year: Optional[int] = Query(None, description="Filter by reporting year"),
+    reporting_period: Optional[str] = Query(None, description="Filter by reporting period"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve document-level carbon emission contribution rankings.
+    """
+    return carbon_dashboard_service.get_document_contributions(
+        db,
+        reporting_year=reporting_year,
+        reporting_period=reporting_period,
+        scope=scope,
+        category=category,
+        document_id=document_id,
+    )
+
+@router.get("/carbon-dashboard/trends", response_model=CarbonTrendsResponse)
+def get_carbon_dashboard_trends(
+    reporting_year: Optional[int] = Query(None, description="Filter by reporting year"),
+    reporting_period: Optional[str] = Query(None, description="Filter by reporting period"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve historical trend analytics by reporting period and reporting year.
+    """
+    return carbon_dashboard_service.get_trends(
+        db,
+        reporting_year=reporting_year,
+        reporting_period=reporting_period,
+        scope=scope,
+        category=category,
+        document_id=document_id,
+    )
+
+@router.get("/carbon-dashboard/coverage", response_model=CarbonDataCoverage)
+def get_carbon_dashboard_coverage(
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve calculation coverage, audit indicators, and unresolved activity items.
+    """
+    return carbon_dashboard_service.get_data_coverage(db, document_id=document_id)
+
+@router.get("/carbon-dashboard/top-sources", response_model=CarbonTopSourcesResponse)
+def get_carbon_dashboard_top_sources(
+    limit: int = Query(5, ge=1, le=50, description="Max number of sources to return"),
+    reporting_year: Optional[int] = Query(None, description="Filter by reporting year"),
+    reporting_period: Optional[str] = Query(None, description="Filter by reporting period"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve top emission sources ranked by posted CO2e.
+    """
+    return carbon_dashboard_service.get_top_sources(
+        db,
+        limit=limit,
+        reporting_year=reporting_year,
+        reporting_period=reporting_period,
+        scope=scope,
+        category=category,
+        document_id=document_id,
+    )
+
+@router.get("/carbon-dashboard/reconciliation", response_model=CarbonDashboardReconciliation)
+def get_carbon_dashboard_reconciliation(
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve high-level dashboard reconciliation comparing extracted document totals with calculated ledger totals.
+    """
+    return carbon_dashboard_service.get_reconciliation(db, document_id=document_id)
 
 @router.get("/stats", response_model=DashboardStatsResponse)
 def get_dashboard_stats(db: Session = Depends(get_db)):

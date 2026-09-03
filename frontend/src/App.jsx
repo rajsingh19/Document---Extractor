@@ -7,6 +7,7 @@ import EmissionFactors from './pages/EmissionFactors';
 import ActivityDataPage from './pages/ActivityData';
 import CarbonCalculationsPage from './pages/CarbonCalculations';
 import CarbonLedger from './pages/CarbonLedger';
+import CarbonDashboard from './pages/CarbonDashboard';
 import Metrics from './pages/Metrics';
 import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument, getAttentionItems } from './services/api';
 
@@ -74,6 +75,13 @@ export default function App() {
 
     if (pathname === '/carbon-ledger') {
       setActiveTab('carbon-ledger');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      return;
+    }
+
+    if (pathname === '/carbon-dashboard') {
+      setActiveTab('carbon-dashboard');
       setSelectedDocument(null);
       setReportDocId(null);
       return;
@@ -267,6 +275,8 @@ export default function App() {
           <CarbonCalculationsPage />
         ) : activeTab === 'carbon-ledger' ? (
           <CarbonLedger />
+        ) : activeTab === 'carbon-dashboard' ? (
+          <CarbonDashboard onNavigate={handleSelectTab} />
         ) : activeTab === 'metrics' ? (
           <Metrics
             stats={stats}

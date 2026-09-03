@@ -21,7 +21,8 @@ import {
   BookOpen,
   Scale,
   Check,
-  Archive
+  Archive,
+  BarChart3
 } from 'lucide-react';
 import ExtractionTable from '../components/ExtractionTable';
 import EvidenceSection from '../components/EvidenceSection';
@@ -924,6 +925,83 @@ export default function DocumentDetail({
               <p className="text-[11px] text-slate-500">
                 * Note: Differences reflect discrepancy between verbatim document reporting and registry factor calculations. Neither value is altered.
               </p>
+            </div>
+
+            {/* 5E. CARBON FOOTPRINT DASHBOARD SUMMARY (Step 15 Integration) */}
+            <div className="bg-gradient-to-r from-emerald-50/70 via-teal-50/40 to-slate-50 border border-emerald-200 rounded-xl p-5 shadow-2xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-100">
+                <div className="flex items-center space-x-2">
+                  <BarChart3 className="w-4 h-4 text-[#0F6B56]" />
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Carbon Footprint Summary (Step 15)
+                  </h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    {ledgerSummary?.posted_records ? `${ledgerSummary.posted_records} Posted Entries` : 'Awaiting Accounting Post'}
+                  </span>
+                </div>
+                <a
+                  href="/carbon-dashboard"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.history.pushState(null, '', '/carbon-dashboard');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                  }}
+                  className="px-3.5 py-1.5 bg-[#0F6B56] hover:bg-[#0c5645] text-white rounded-lg text-xs font-semibold transition-colors shadow-2xs flex items-center space-x-1.5"
+                >
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  <span>View Carbon Dashboard &rarr;</span>
+                </a>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="bg-white border border-slate-200 rounded-lg p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Scope 1 (Fuel)</span>
+                  <span className="text-sm font-bold text-slate-900">
+                    {ledgerSummary?.scope_1_posted_co2e != null
+                      ? `${(ledgerSummary.scope_1_posted_co2e / 1000).toFixed(4)} tCO2e`
+                      : '—'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    {ledgerSummary?.scope_1_posted_co2e != null ? `${ledgerSummary.scope_1_posted_co2e.toLocaleString()} kg` : 'No direct emissions'}
+                  </span>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-lg p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Scope 2 (Electricity)</span>
+                  <span className="text-sm font-bold text-slate-900">
+                    {ledgerSummary?.scope_2_posted_co2e != null
+                      ? `${(ledgerSummary.scope_2_posted_co2e / 1000).toFixed(4)} tCO2e`
+                      : '—'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    {ledgerSummary?.scope_2_posted_co2e != null ? `${ledgerSummary.scope_2_posted_co2e.toLocaleString()} kg` : 'No grid emissions'}
+                  </span>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-lg p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Scope 3 (Supply Chain)</span>
+                  <span className="text-sm font-bold text-slate-900">
+                    {ledgerSummary?.scope_3_posted_co2e != null
+                      ? `${(ledgerSummary.scope_3_posted_co2e / 1000).toFixed(4)} tCO2e`
+                      : '—'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    {ledgerSummary?.scope_3_posted_co2e != null ? `${ledgerSummary.scope_3_posted_co2e.toLocaleString()} kg` : 'No calculated data'}
+                  </span>
+                </div>
+
+                <div className="bg-white border border-emerald-300 rounded-lg p-3">
+                  <span className="text-[11px] font-bold text-emerald-800 block">Total Footprint</span>
+                  <span className="text-sm font-extrabold text-[#0F6B56]">
+                    {ledgerSummary?.total_posted_co2e != null
+                      ? `${(ledgerSummary.total_posted_co2e / 1000).toFixed(4)} tCO2e`
+                      : '—'}
+                  </span>
+                  <span className="text-[10px] text-emerald-700 font-medium block mt-0.5">
+                    {ledgerSummary?.total_posted_co2e != null ? `${ledgerSummary.total_posted_co2e.toLocaleString()} kgCO2e` : 'Awaiting ledger post'}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* 6. SOURCE EVIDENCE ANCHORS (Top 5) */}

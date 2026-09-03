@@ -266,6 +266,58 @@ export const getCarbonLedgerSummary = async (params = {}) => {
   return response.data;
 };
 
+// --- Carbon Footprint Dashboard API Methods (Step 15) ---
+
+export const getCarbonDashboard = async (params = {}) => {
+  const response = await api.get('/carbon-dashboard', { params });
+  return response.data;
+};
+
+export const getCarbonDashboardSummary = async (params = {}) => {
+  const response = await api.get('/carbon-dashboard/summary', { params });
+  return response.data;
+};
+
+export const getCarbonDashboardScopes = async (params = {}) => {
+  const response = await api.get('/carbon-dashboard/scopes', { params });
+  return response.data;
+};
+
+export const getCarbonDashboardCategories = async (params = {}) => {
+  const response = await api.get('/carbon-dashboard/categories', { params });
+  return response.data;
+};
+
+export const getCarbonDashboardActivities = async (params = {}) => {
+  const response = await api.get('/carbon-dashboard/activities', { params });
+  return response.data;
+};
+
+export const getCarbonDashboardDocuments = async (params = {}) => {
+  const response = await api.get('/carbon-dashboard/documents', { params });
+  return response.data;
+};
+
+export const getCarbonDashboardTrends = async (params = {}) => {
+  const response = await api.get('/carbon-dashboard/trends', { params });
+  return response.data;
+};
+
+export const getCarbonDashboardCoverage = async (params = {}) => {
+  const response = await api.get('/carbon-dashboard/coverage', { params });
+  return response.data;
+};
+
+export const getCarbonDashboardTopSources = async (params = {}) => {
+  const response = await api.get('/carbon-dashboard/top-sources', { params });
+  return response.data;
+};
+
+export const getCarbonDashboardReconciliation = async (params = {}) => {
+  const response = await api.get('/carbon-dashboard/reconciliation', { params });
+  return response.data;
+};
+
 export default api;
 
 
