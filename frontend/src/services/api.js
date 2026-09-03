@@ -487,6 +487,52 @@ export const getComplianceReportPdfUrl = (reportId) => {
   return `/api/compliance-reports/${reportId}/pdf`;
 };
 
+// --- Green Finance / Green Loan Readiness Engine API Methods (Step 19) ---
+
+export const getGreenFinanceFramework = async () => {
+  const response = await api.get('/green-finance/framework');
+  return response.data;
+};
+
+export const getGreenFinanceRequirements = async () => {
+  const response = await api.get('/green-finance/requirements');
+  return response.data;
+};
+
+export const createGreenFinanceAssessment = async (data) => {
+  const response = await api.post('/green-finance/assessments', data);
+  return response.data;
+};
+
+export const getGreenFinanceAssessments = async (params = {}) => {
+  const response = await api.get('/green-finance/assessments', { params });
+  return response.data;
+};
+
+export const getGreenFinanceAssessment = async (assessmentId) => {
+  const response = await api.get(`/green-finance/assessments/${assessmentId}`);
+  return response.data;
+};
+
+export const generateGreenFinanceAssessment = async (assessmentId) => {
+  const response = await api.post(`/green-finance/assessments/${assessmentId}/generate`);
+  return response.data;
+};
+
+export const updateGreenFinanceAssessmentStatus = async (assessmentId, status, notes = null) => {
+  const response = await api.post(`/green-finance/assessments/${assessmentId}/status`, { status, notes });
+  return response.data;
+};
+
+export const finalizeGreenFinanceAssessment = async (assessmentId) => {
+  const response = await api.post(`/green-finance/assessments/${assessmentId}/finalize`);
+  return response.data;
+};
+
+export const getGreenFinanceAssessmentPdfUrl = (assessmentId) => {
+  return `/api/green-finance/assessments/${assessmentId}/pdf`;
+};
+
 export default api;
 
 

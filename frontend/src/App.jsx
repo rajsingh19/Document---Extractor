@@ -12,6 +12,8 @@ import ReductionOpportunities from './pages/ReductionOpportunities';
 import ReductionProjects from './pages/ReductionProjects';
 import ComplianceReports from './pages/ComplianceReports';
 import ComplianceReportDetail from './pages/ComplianceReportDetail';
+import GreenFinance from './pages/GreenFinance';
+import GreenFinanceDetail from './pages/GreenFinanceDetail';
 import Metrics from './pages/Metrics';
 import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument, getAttentionItems } from './services/api';
 
@@ -20,6 +22,7 @@ export default function App() {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [reportDocId, setReportDocId] = useState(null);
   const [complianceReportId, setComplianceReportId] = useState(null);
+  const [greenFinanceAssessmentId, setGreenFinanceAssessmentId] = useState(null);
   const [health, setHealth] = useState(null);
   const [stats, setStats] = useState(null);
   const [documents, setDocuments] = useState([]);
@@ -122,6 +125,27 @@ export default function App() {
       setSelectedDocument(null);
       setReportDocId(null);
       setComplianceReportId(null);
+      setGreenFinanceAssessmentId(null);
+      return;
+    }
+
+    const gfMatch = pathname.match(/^\/green-finance\/(\d+)$/);
+    if (gfMatch) {
+      const gfId = parseInt(gfMatch[1], 10);
+      setGreenFinanceAssessmentId(gfId);
+      setActiveTab('green-finance-detail');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      setComplianceReportId(null);
+      return;
+    }
+
+    if (pathname === '/green-finance') {
+      setActiveTab('green-finance');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      setComplianceReportId(null);
+      setGreenFinanceAssessmentId(null);
       return;
     }
 
@@ -340,6 +364,28 @@ export default function App() {
               setActiveTab('compliance-reports');
               setComplianceReportId(null);
               window.history.pushState(null, '', '/compliance-reports');
+            }}
+          />
+        ) : activeTab === 'green-finance' ? (
+          <GreenFinance
+            onNavigate={(tab, gfId) => {
+              if (gfId) {
+                setGreenFinanceAssessmentId(gfId);
+                setActiveTab('green-finance-detail');
+                window.history.pushState(null, '', `/green-finance/${gfId}`);
+              } else {
+                setActiveTab(tab);
+                window.history.pushState(null, '', `/${tab}`);
+              }
+            }}
+          />
+        ) : activeTab === 'green-finance-detail' ? (
+          <GreenFinanceDetail
+            assessmentId={greenFinanceAssessmentId}
+            onNavigate={(tab) => {
+              setActiveTab('green-finance');
+              setGreenFinanceAssessmentId(null);
+              window.history.pushState(null, '', '/green-finance');
             }}
           />
         ) : activeTab === 'metrics' ? (

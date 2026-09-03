@@ -579,6 +579,13 @@ class CopilotRAGRouter:
         if any(k in q for k in ["total invoice amount", "invoice total", "total amount payable", "net payable", "total payable amount", "bill amount", "total bill"]):
             return ParsedQueryIntent(retrieval_mode="DOCUMENT_METADATA", metadata_field="invoice_amount", requested_period=requested_period)
 
+        # Green Finance Readiness & Refusal Routing
+        if any(k in q for k in ["green finance", "green loan", "readiness score", "am i ready for green finance", "application readiness", "lender review"]):
+            return ParsedQueryIntent(retrieval_mode="GREEN_FINANCE_READINESS", requested_period=requested_period)
+
+        if any(k in q for k in ["will i get approved", "loan approval", "loan eligible", "guaranteed loan", "what interest rate", "what loan amount", "credit score", "creditworthiness"]):
+            return ParsedQueryIntent(retrieval_mode="GREEN_FINANCE_READINESS", is_speculative=True, requested_period=requested_period)
+
         # 6. Metric Inventory
         if any(k in q for k in ["what sustainability metrics can you extract", "what sustainability metrics are present", "which sustainability metrics do we currently have", "what metrics are in this document", "sustainability metrics present"]):
             return ParsedQueryIntent(retrieval_mode="METRIC_INVENTORY", is_metric_inventory=True, requested_period=requested_period)

@@ -121,6 +121,18 @@ export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, i
               </button>
 
               <button
+                onClick={() => onSelectTab('green-finance')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'green-finance' || activeTab === 'green-finance-detail'
+                    ? 'bg-[#EAF7F2] text-[#0F6B56]'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Green Finance</span>
+              </button>
+
+              <button
                 onClick={() => onSelectTab('carbon-calculations')}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
                   activeTab === 'carbon-calculations'

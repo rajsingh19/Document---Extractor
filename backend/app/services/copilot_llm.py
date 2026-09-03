@@ -245,9 +245,45 @@ class CopilotLLMService:
                 summary=context.summary
             )
 
-        # -------------------------------------------------------------
-        # 3. HALLUCINATION & UNSUPPORTED SPECULATION REFUSAL
-        # -------------------------------------------------------------
+        # Green Finance Credit Underwriting Refusal Defense
+        if any(k in q_lower for k in [
+            "will i get approved", "will my loan get approved", "loan approval", "loan eligible", "guaranteed loan",
+            "what interest rate", "what loan amount", "calculate my credit score", "creditworthiness", "credit score"
+        ]):
+            answer = (
+                "Senseible measures green-finance application evidence readiness for review only. "
+                "It does not perform credit underwriting, loan approval decisions, interest rate predictions, "
+                "loan amount estimates, or credit scoring. Please consult your financial provider for credit evaluation."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="GREEN_FINANCE_READINESS",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["green finance", "green loan", "readiness score", "am i ready for green finance"]):
+            answer = (
+                "Based on the sustainability evidence available in Senseible, your Green Finance Readiness Assessment evaluates "
+                "application readiness across 10 core dimensions (Data Readiness, Carbon Accounting, Evidence, Emissions Data, "
+                "Reduction Plan, Projects, Measurement & Verification, Reporting, Governance, and Finance Document Readiness).\n\n"
+                "• **Readiness Score:** Evaluated deterministically from POSTED carbon ledger entries and verified document evidence.\n"
+                "• **Status Band:** Measures readiness for lender review (NOT_READY, PARTIALLY_READY, or READY_FOR_REVIEW).\n"
+                "• **Disclaimer:** This assessment measures evidence completeness for application preparation and does not constitute loan approval or credit scoring."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="GREEN_FINANCE_READINESS",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
         if any(k in q_lower for k in ["did this project reduce", "did project reduce", "did the project cause", "project cause emissions"]):
             answer = "An observed accounting change is recorded between the reference and measurement periods using actual POSTED carbon ledger data. This comparison does not by itself establish that the reduction project caused the change."
             return CopilotResponse(

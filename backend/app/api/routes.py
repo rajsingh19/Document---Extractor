@@ -116,6 +116,18 @@ from backend.app.schemas.compliance_report import (
 from backend.app.services.compliance_frameworks import compliance_framework_service
 from backend.app.services.compliance_report import compliance_report_service
 from backend.app.services.compliance_report_pdf import compliance_pdf_renderer
+from backend.app.schemas.green_finance import (
+    GreenFinanceAssessmentCreate,
+    GreenFinanceAssessmentStatusUpdate,
+    GreenFinanceAssessmentResponse,
+    GreenFinanceAssessmentList,
+)
+from backend.app.services.green_finance_readiness import (
+    green_finance_service,
+    GREEN_FINANCE_DISCLAIMER,
+    REQUIREMENT_DEFINITIONS,
+)
+from backend.app.services.green_finance_pdf import green_finance_pdf_renderer
 from backend.app.services.evidence_report import evidence_report_service
 from backend.app.services.report_pdf import report_pdf_renderer
 from backend.app.services.emission_factor_service import emission_factor_service
@@ -2169,6 +2181,221 @@ def get_compliance_report_pdf_endpoint(
     pdf_bytes = compliance_pdf_renderer.render(dto)
 
     filename = f"{report.report_code}_{report.framework}_{report.reporting_period}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+# ------------------------------------------------------------------
+# STEP 19 — GREEN FINANCE / GREEN LOAN READINESS ENGINE ENDPOINTS
+# ------------------------------------------------------------------
+
+@router.get("/green-finance/requirements")
+def list_green_finance_requirements_endpoint():
+    """
+    List all 10 dimension requirement criteria definitions.
+    """
+    return REQUIREMENT_DEFINITIONS
+
+
+@router.get("/green-finance/framework")
+def get_green_finance_framework_endpoint():
+    """
+    Get Green Finance Readiness framework metadata and product boundary disclaimers.
+    """
+    return {
+        "framework_name": "Green Finance Readiness Engine",
+        "engine_version": "1.0",
+        "disclaimer": GREEN_FINANCE_DISCLAIMER,
+        "scoring_methodology": (
+            "Weighted completion ratio across 10 dimensions: Data Readiness, Carbon Accounting, Evidence, "
+            "Emissions Data, Reduction Plan, Reduction Projects, Measurement & Verification, Reporting, "
+            "Governance, and Finance Document Readiness. Scores 0-39: NOT_READY, 40-69: PARTIALLY_READY, 70-100: READY_FOR_REVIEW."
+        ),
+        "dimensions_count": 10,
+        "requirements_count": len(REQUIREMENT_DEFINITIONS),
+    }
+
+
+@router.post("/green-finance/assessments")
+def create_green_finance_assessment_endpoint(
+    data: GreenFinanceAssessmentCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new draft GreenFinanceAssessment.
+    """
+    try:
+        assessment = green_finance_service.create_assessment(db, data)
+        return green_finance_service.build_assessment_dto(db, assessment)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/green-finance/assessments")
+def list_green_finance_assessments_endpoint(
+    reporting_period: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    List Green Finance Readiness assessments.
+    """
+    assessments = green_finance_service.get_assessments(db, reporting_period, status)
+    items = [green_finance_service.build_assessment_dto(db, a) for a in assessments]
+    return {"total": len(items), "items": items}
+
+
+@router.get("/green-finance/assessments/{assessment_id}")
+def get_green_finance_assessment_endpoint(
+    assessment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed Green Finance assessment object.
+    """
+    assessment = green_finance_service.get_assessment(db, assessment_id)
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Green Finance assessment not found")
+    return green_finance_service.build_assessment_dto(db, assessment)
+
+
+@router.post("/green-finance/assessments/{assessment_id}/generate")
+def generate_green_finance_assessment_endpoint(
+    assessment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Deterministically evaluate readiness requirements and compute overall score across 10 dimensions.
+    """
+    try:
+        assessment = green_finance_service.generate_assessment(db, assessment_id)
+        return green_finance_service.build_assessment_dto(db, assessment)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/green-finance/assessments/{assessment_id}/requirements")
+def get_green_finance_assessment_requirements_endpoint(
+    assessment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get requirements list for a Green Finance assessment.
+    """
+    assessment = green_finance_service.get_assessment(db, assessment_id)
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Green Finance assessment not found")
+    dto = green_finance_service.build_assessment_dto(db, assessment)
+    return dto.requirements
+
+
+@router.get("/green-finance/assessments/{assessment_id}/evidence")
+def get_green_finance_assessment_evidence_endpoint(
+    assessment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get evidence records linked to a Green Finance assessment.
+    """
+    assessment = green_finance_service.get_assessment(db, assessment_id)
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Green Finance assessment not found")
+    dto = green_finance_service.build_assessment_dto(db, assessment)
+    evidence_list = []
+    for req in dto.requirements:
+        evidence_list.extend(req.evidence_items)
+    return evidence_list
+
+
+@router.get("/green-finance/assessments/{assessment_id}/actions")
+def get_green_finance_assessment_actions_endpoint(
+    assessment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get recommended next actions for improving readiness posture.
+    """
+    assessment = green_finance_service.get_assessment(db, assessment_id)
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Green Finance assessment not found")
+    dto = green_finance_service.build_assessment_dto(db, assessment)
+    return dto.next_actions
+
+
+@router.get("/green-finance/assessments/{assessment_id}/checklist")
+def get_green_finance_assessment_checklist_endpoint(
+    assessment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get application readiness document checklist.
+    """
+    assessment = green_finance_service.get_assessment(db, assessment_id)
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Green Finance assessment not found")
+    dto = green_finance_service.build_assessment_dto(db, assessment)
+    return dto.checklist
+
+
+@router.post("/green-finance/assessments/{assessment_id}/finalize")
+def finalize_green_finance_assessment_endpoint(
+    assessment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Finalize Green Finance assessment (makes assessment immutable).
+    """
+    try:
+        assessment = green_finance_service.update_assessment_status(
+            db=db,
+            assessment_id=assessment_id,
+            new_status="FINALIZED",
+            notes="Assessment finalized for lender application review."
+        )
+        return green_finance_service.build_assessment_dto(db, assessment)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/green-finance/assessments/{assessment_id}/status")
+def update_green_finance_assessment_status_endpoint(
+    assessment_id: int,
+    data: GreenFinanceAssessmentStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update Green Finance assessment workflow status.
+    """
+    try:
+        assessment = green_finance_service.update_assessment_status(
+            db=db,
+            assessment_id=assessment_id,
+            new_status=data.status,
+            notes=data.notes
+        )
+        return green_finance_service.build_assessment_dto(db, assessment)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/green-finance/assessments/{assessment_id}/pdf")
+def get_green_finance_assessment_pdf_endpoint(
+    assessment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Download deterministic ReportLab PDF report for Green Finance Readiness assessment.
+    """
+    assessment = green_finance_service.get_assessment(db, assessment_id)
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Green Finance assessment not found")
+
+    dto = green_finance_service.build_assessment_dto(db, assessment)
+    pdf_bytes = green_finance_pdf_renderer.render(dto)
+
+    filename = f"{assessment.assessment_code}_Green_Finance_Readiness_{assessment.reporting_period}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
