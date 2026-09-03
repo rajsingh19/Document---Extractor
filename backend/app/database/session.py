@@ -41,6 +41,8 @@ def init_db():
     from backend.app.models.carbon_ledger import CarbonLedgerEntry  # noqa: F401
     from backend.app.models.reduction_opportunity import ReductionOpportunity  # noqa: F401
     from backend.app.models.reduction_project import ReductionProject, ReductionProjectEvent  # noqa: F401
+    from backend.app.models.reduction_measurement import ReductionMeasurement, ReductionMeasurementEvent  # noqa: F401
+    from backend.app.models.verification_record import VerificationRecord  # noqa: F401
     Base.metadata.create_all(bind=engine)
     
     # Auto-migration for SQLite columns added in Step 3

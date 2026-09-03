@@ -787,6 +787,34 @@ export default function CarbonDashboard({ onNavigate }) {
               </p>
             </div>
           </div>
+
+          {/* STEP 17: MEASURED PROJECT RESULTS */}
+          <div className="mt-4 pt-4 border-t border-slate-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                Measured Project Results (Accounting Ledger Comparisons)
+              </span>
+              {onNavigate && (
+                <button
+                  onClick={() => onNavigate('projects')}
+                  className="text-xs text-purple-700 hover:text-purple-900 font-semibold flex items-center gap-1"
+                >
+                  <span>Manage projects & verification</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="p-3 bg-purple-50/50 rounded-xl border border-purple-100 flex items-center justify-between text-xs text-purple-900">
+              <span>
+                Project measurements observe changes between actual POSTED reporting periods.
+                <strong> Carbon footprint totals remain strictly based on POSTED ledger entries.</strong>
+              </span>
+              <span className="font-semibold px-2 py-0.5 bg-purple-100 rounded text-purple-800">
+                Evidence-Backed Measurement Layer
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

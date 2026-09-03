@@ -94,6 +94,18 @@ from backend.app.schemas.reduction_project import (
 )
 from backend.app.services.reduction_opportunity import reduction_opportunity_service
 from backend.app.services.reduction_project import reduction_project_service
+from backend.app.schemas.reduction_measurement import (
+    ReductionMeasurementCreate,
+    ReductionMeasurementStatusUpdate,
+    ReductionMeasurementResponse,
+    ReductionMeasurementList,
+)
+from backend.app.schemas.verification_record import (
+    VerificationRecordCreate,
+    VerificationRecordStatusUpdate,
+    VerificationRecordResponse,
+)
+from backend.app.services.reduction_measurement import reduction_measurement_service
 from backend.app.services.evidence_report import evidence_report_service
 from backend.app.services.report_pdf import report_pdf_renderer
 from backend.app.services.emission_factor_service import emission_factor_service
@@ -1762,6 +1774,215 @@ def update_reduction_project_status(
         if project.actual_post_project_co2e is not None:
             dto.actual_post_project_t = float(Decimal(str(project.actual_post_project_co2e)) / Decimal("1000"))
         return dto
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ------------------------------------------------------------------
+# STEP 17 — REDUCTION PROJECT MEASUREMENT & VERIFICATION ENDPOINTS
+# ------------------------------------------------------------------
+
+@router.post("/reduction-projects/{project_id}/measurements")
+def create_reduction_measurement_endpoint(
+    project_id: int,
+    data: ReductionMeasurementCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new ReductionMeasurement for a project comparing reference and measurement periods.
+    """
+    try:
+        meas = reduction_measurement_service.create_measurement(
+            db=db,
+            project_id=project_id,
+            reference_period=data.reference_period,
+            measurement_period=data.measurement_period,
+            measurement_scope_type=data.measurement_scope_type,
+            measurement_scope=data.measurement_scope,
+            measurement_category=data.measurement_category,
+            measurement_activity_type=data.measurement_activity_type,
+            methodology_note=data.methodology_note,
+        )
+        events = reduction_measurement_service.get_measurement_events(db, meas.id)
+        return reduction_measurement_service.build_measurement_dto(meas, events)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/reduction-projects/{project_id}/measurements")
+def list_reduction_measurements_endpoint(
+    project_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    List all measurement records associated with a reduction project.
+    """
+    project = reduction_project_service.get_project(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Reduction project not found")
+
+    measurements = reduction_measurement_service.get_measurements(db, project_id)
+    items = []
+    for m in measurements:
+        events = reduction_measurement_service.get_measurement_events(db, m.id)
+        items.append(reduction_measurement_service.build_measurement_dto(m, events))
+    return {"total": len(items), "items": items}
+
+
+@router.get("/reduction-measurements/{measurement_id}")
+def get_reduction_measurement_endpoint(
+    measurement_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed reduction measurement record with audit event timeline.
+    """
+    meas = reduction_measurement_service.get_measurement(db, measurement_id)
+    if not meas:
+        raise HTTPException(status_code=404, detail="Reduction measurement not found")
+
+    events = reduction_measurement_service.get_measurement_events(db, meas.id)
+    return reduction_measurement_service.build_measurement_dto(meas, events)
+
+
+@router.post("/reduction-measurements/{measurement_id}/calculate")
+def calculate_reduction_measurement_endpoint(
+    measurement_id: int,
+    document_id: Optional[int] = Query(None, description="Optional document filter"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve actual POSTED carbon ledger data for reference and measurement periods and calculate observed accounting change.
+    """
+    try:
+        return reduction_measurement_service.calculate_measurement(db, measurement_id, document_id=document_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/reduction-measurements/{measurement_id}/status")
+def update_reduction_measurement_status_endpoint(
+    measurement_id: int,
+    data: ReductionMeasurementStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update measurement lifecycle status (DRAFT, READY, MEASURED, NEEDS_REVIEW, FINALIZED) with audit logging.
+    """
+    try:
+        meas = reduction_measurement_service.update_status(db, measurement_id, data.status, data.note)
+        events = reduction_measurement_service.get_measurement_events(db, meas.id)
+        return reduction_measurement_service.build_measurement_dto(meas, events)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/reduction-measurements/{measurement_id}/verification")
+def submit_verification_endpoint(
+    measurement_id: int,
+    data: VerificationRecordCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Submit verification metadata for a measurement record.
+    """
+    try:
+        rec = reduction_measurement_service.submit_verification(
+            db=db,
+            measurement_id=measurement_id,
+            verifier_name=data.verifier_name,
+            verifier_organization=data.verifier_organization,
+            verification_reference=data.verification_reference,
+            verification_date=data.verification_date,
+            verification_notes=data.verification_notes,
+            initial_status=data.verification_status,
+        )
+        return {
+            "id": rec.id,
+            "project_id": rec.project_id,
+            "measurement_id": rec.measurement_id,
+            "verifier_name": rec.verifier_name,
+            "verifier_organization": rec.verifier_organization,
+            "verification_reference": rec.verification_reference,
+            "verification_date": rec.verification_date.isoformat() if rec.verification_date else None,
+            "verification_notes": rec.verification_notes,
+            "verification_status": rec.verification_status,
+            "disclaimer": "Senseible does not perform independent verification. External verification requires an independent verifier.",
+            "created_at": rec.created_at.isoformat() if rec.created_at else None,
+            "updated_at": rec.updated_at.isoformat() if rec.updated_at else None,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/reduction-measurements/{measurement_id}/verification")
+def get_verification_endpoint(
+    measurement_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get verification record for a measurement.
+    """
+    rec = reduction_measurement_service.get_verification(db, measurement_id)
+    if not rec:
+        return {
+            "id": None,
+            "project_id": None,
+            "measurement_id": measurement_id,
+            "verification_status": "NOT_SUBMITTED",
+            "disclaimer": "Senseible does not perform independent verification. External verification requires an independent verifier."
+        }
+    return {
+        "id": rec.id,
+        "project_id": rec.project_id,
+        "measurement_id": rec.measurement_id,
+        "verifier_name": rec.verifier_name,
+        "verifier_organization": rec.verifier_organization,
+        "verification_reference": rec.verification_reference,
+        "verification_date": rec.verification_date.isoformat() if rec.verification_date else None,
+        "verification_notes": rec.verification_notes,
+        "verification_status": rec.verification_status,
+        "disclaimer": "Senseible does not perform independent verification. External verification requires an independent verifier.",
+        "created_at": rec.created_at.isoformat() if rec.created_at else None,
+        "updated_at": rec.updated_at.isoformat() if rec.updated_at else None,
+    }
+
+
+@router.post("/reduction-measurements/{measurement_id}/verification/status")
+def update_verification_status_endpoint(
+    measurement_id: int,
+    data: VerificationRecordStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update verification workflow status.
+    Enforces validation rules: EXTERNALLY_VERIFIED requires verifier_name, verifier_organization, verification_reference, verification_date.
+    """
+    try:
+        rec = reduction_measurement_service.update_verification_status(
+            db=db,
+            measurement_id=measurement_id,
+            new_status=data.verification_status,
+            verifier_name=data.verifier_name,
+            verifier_organization=data.verifier_organization,
+            verification_reference=data.verification_reference,
+            verification_date=data.verification_date,
+            verification_notes=data.verification_notes,
+            note=data.note,
+        )
+        return {
+            "id": rec.id,
+            "project_id": rec.project_id,
+            "measurement_id": rec.measurement_id,
+            "verifier_name": rec.verifier_name,
+            "verifier_organization": rec.verifier_organization,
+            "verification_reference": rec.verification_reference,
+            "verification_date": rec.verification_date.isoformat() if rec.verification_date else None,
+            "verification_notes": rec.verification_notes,
+            "verification_status": rec.verification_status,
+            "disclaimer": "Senseible does not perform independent verification. External verification requires an independent verifier.",
+            "created_at": rec.created_at.isoformat() if rec.created_at else None,
+            "updated_at": rec.updated_at.isoformat() if rec.updated_at else None,
+        }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

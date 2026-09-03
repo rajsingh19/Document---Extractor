@@ -248,6 +248,18 @@ class CopilotLLMService:
         # -------------------------------------------------------------
         # 3. HALLUCINATION & UNSUPPORTED SPECULATION REFUSAL
         # -------------------------------------------------------------
+        if any(k in q_lower for k in ["did this project reduce", "did project reduce", "did the project cause", "project cause emissions"]):
+            answer = "An observed accounting change is recorded between the reference and measurement periods using actual POSTED carbon ledger data. This comparison does not by itself establish that the reduction project caused the change."
+            return CopilotResponse(
+                answer=answer,
+                intent="EMISSIONS_ANALYSIS",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
         if parsed.is_speculative:
             if any(k in q_lower for k in ["how much money will we save", "save if we reduce", "financial savings"]):
                 answer = "I do not have verified financial tariff calculation models to estimate financial savings for a hypothetical reduction. Based on the recorded document, your total electricity consumption is 48,750 kWh (Total Amount Payable: ₹453,169.56) for October 2024."

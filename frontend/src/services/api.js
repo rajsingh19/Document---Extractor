@@ -377,6 +377,50 @@ export const updateReductionProjectStatus = async (id, status, note = null) => {
   return response.data;
 };
 
+// --- Carbon Reduction Project Measurement & Verification API Methods (Step 17) ---
+
+export const createReductionMeasurement = async (projectId, data) => {
+  const response = await api.post(`/reduction-projects/${projectId}/measurements`, data);
+  return response.data;
+};
+
+export const getReductionMeasurements = async (projectId) => {
+  const response = await api.get(`/reduction-projects/${projectId}/measurements`);
+  return response.data;
+};
+
+export const getReductionMeasurement = async (measurementId) => {
+  const response = await api.get(`/reduction-measurements/${measurementId}`);
+  return response.data;
+};
+
+export const calculateReductionMeasurement = async (measurementId, documentId = null) => {
+  const response = await api.post(`/reduction-measurements/${measurementId}/calculate`, null, {
+    params: documentId ? { document_id: documentId } : {}
+  });
+  return response.data;
+};
+
+export const updateReductionMeasurementStatus = async (measurementId, status, note = null) => {
+  const response = await api.post(`/reduction-measurements/${measurementId}/status`, { status, note });
+  return response.data;
+};
+
+export const submitVerificationRecord = async (measurementId, data) => {
+  const response = await api.post(`/reduction-measurements/${measurementId}/verification`, data);
+  return response.data;
+};
+
+export const getVerificationRecord = async (measurementId) => {
+  const response = await api.get(`/reduction-measurements/${measurementId}/verification`);
+  return response.data;
+};
+
+export const updateVerificationStatus = async (measurementId, data) => {
+  const response = await api.post(`/reduction-measurements/${measurementId}/verification/status`, data);
+  return response.data;
+};
+
 export default api;
 
 
