@@ -37,6 +37,8 @@ def init_db():
     from backend.app.models.sustainability_metric import SustainabilityMetric  # noqa: F401
     from backend.app.models.emission_factor import EmissionFactor  # noqa: F401
     from backend.app.models.activity_data import ActivityData  # noqa: F401
+    from backend.app.models.carbon_calculation import CarbonCalculation  # noqa: F401
+    from backend.app.models.carbon_ledger import CarbonLedgerEntry  # noqa: F401
     Base.metadata.create_all(bind=engine)
     
     # Auto-migration for SQLite columns added in Step 3
@@ -191,6 +193,12 @@ def init_db():
             # 4. Synchronize canonical activity data for Document #1 (Step 12C)
             from backend.app.services.activity_data_normalizer import activity_data_normalizer
             activity_data_normalizer.sync_document_activities(db_session, 1)
+
+            # 5. Synchronize carbon calculations & accounting ledger for Document #1 (Step 13 & 14)
+            from backend.app.services.carbon_calculation import carbon_calculation_engine
+            from backend.app.services.carbon_ledger import carbon_ledger_service
+            carbon_calculation_engine.calculate_document_emissions(db_session, 1)
+            carbon_ledger_service.post_document(db_session, 1)
 
             db_session.commit()
     except Exception as e:

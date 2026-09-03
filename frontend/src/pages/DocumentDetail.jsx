@@ -11,12 +11,17 @@ import {
   FileSearch, 
   ShieldCheck, 
   Download, 
-  ChevronDown,
-  ChevronUp,
-  History,
-  X,
-  Sparkles,
-  Info
+  ChevronDown, 
+  ChevronUp, 
+  History, 
+  X, 
+  Sparkles, 
+  Info, 
+  Calculator,
+  BookOpen,
+  Scale,
+  Check,
+  Archive
 } from 'lucide-react';
 import ExtractionTable from '../components/ExtractionTable';
 import EvidenceSection from '../components/EvidenceSection';
@@ -28,7 +33,12 @@ import {
   correctField, 
   updateReviewStatus, 
   getAuditTrail, 
-  deleteDocument
+  deleteDocument,
+  getDocumentCarbonCalculations,
+  calculateDocumentCarbonEmissions,
+  getDocumentCarbonLedger,
+  postDocumentCarbonLedger,
+  getDocumentCarbonReconciliation
 } from '../services/api';
 
 export default function DocumentDetail({
@@ -46,13 +56,72 @@ export default function DocumentDetail({
   const [showRawText, setShowRawText] = useState(false);
   const [showEvidenceModal, setShowEvidenceModal] = useState(false);
   const [showChatbot, setShowChatbot] = useState(false);
+  const [carbonSummary, setCarbonSummary] = useState(null);
+  const [isCalculatingCarbon, setIsCalculatingCarbon] = useState(false);
+  const [ledgerSummary, setLedgerSummary] = useState(null);
+  const [reconciliation, setReconciliation] = useState(null);
+  const [isPostingLedger, setIsPostingLedger] = useState(false);
 
   useEffect(() => {
     setDoc(initialDoc);
     if (initialDoc?.id) {
       loadAuditTrail(initialDoc.id);
+      loadCarbonSummary(initialDoc.id);
+      loadLedgerAndReconciliation(initialDoc.id);
     }
   }, [initialDoc]);
+
+  const loadCarbonSummary = async (id) => {
+    try {
+      const summary = await getDocumentCarbonCalculations(id);
+      setCarbonSummary(summary);
+    } catch (err) {
+      console.error('Failed to load carbon summary:', err);
+    }
+  };
+
+  const loadLedgerAndReconciliation = async (id) => {
+    try {
+      const [ledData, reconData] = await Promise.all([
+        getDocumentCarbonLedger(id).catch(() => null),
+        getDocumentCarbonReconciliation(id).catch(() => null),
+      ]);
+      if (ledData) setLedgerSummary(ledData);
+      if (reconData) setReconciliation(reconData);
+    } catch (err) {
+      console.error('Failed to load ledger / reconciliation:', err);
+    }
+  };
+
+  const handleRunCarbonCalculation = async () => {
+    if (!doc?.id) return;
+    setIsCalculatingCarbon(true);
+    try {
+      const summary = await calculateDocumentCarbonEmissions(doc.id);
+      setCarbonSummary(summary);
+      // Auto-refresh ledger & reconciliation after calculation
+      await loadLedgerAndReconciliation(doc.id);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Carbon calculation failed.');
+    } finally {
+      setIsCalculatingCarbon(false);
+    }
+  };
+
+  const handlePostToLedger = async () => {
+    if (!doc?.id) return;
+    setIsPostingLedger(true);
+    try {
+      const ledSummary = await postDocumentCarbonLedger(doc.id);
+      setLedgerSummary(ledSummary);
+      const reconData = await getDocumentCarbonReconciliation(doc.id);
+      setReconciliation(reconData);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Posting to ledger failed.');
+    } finally {
+      setIsPostingLedger(false);
+    }
+  };
 
   const loadAuditTrail = async (id) => {
     try {
@@ -565,6 +634,296 @@ export default function DocumentDetail({
                 </button>
               </div>
 
+            </div>
+
+            {/* 5B. CARBON CALCULATIONS (Step 13 Engine) */}
+            <div className="bg-white border border-emerald-200 rounded-xl p-5 shadow-2xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <div className="flex items-center space-x-2">
+                  <Calculator className="w-4 h-4 text-emerald-600" />
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Carbon Calculations (Step 13 Engine)
+                  </h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Quantity × Factor
+                  </span>
+                </div>
+                <button
+                  onClick={handleRunCarbonCalculation}
+                  disabled={isCalculatingCarbon}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition-colors shadow-2xs flex items-center space-x-1.5"
+                >
+                  <Calculator className={`w-3.5 h-3.5 ${isCalculatingCarbon ? 'animate-spin' : ''}`} />
+                  <span>{isCalculatingCarbon ? 'Calculating...' : 'Run Carbon Calculation'}</span>
+                </button>
+              </div>
+
+              {/* Calculated Results Summary */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-500 uppercase">Scope 1 (Direct)</span>
+                  <p className="text-base font-bold text-slate-900 font-mono">
+                    {carbonSummary?.scope_1_calculated_co2e != null
+                      ? `${carbonSummary.scope_1_calculated_co2e.toLocaleString()} kg`
+                      : '—'}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    {carbonSummary?.scope_1_calculated_co2e != null
+                      ? `${(carbonSummary.scope_1_calculated_co2e / 1000).toFixed(4)} tCO₂e`
+                      : 'No Scope 1 items'}
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-500 uppercase">Scope 2 (Indirect)</span>
+                  <p className="text-base font-bold text-slate-900 font-mono">
+                    {carbonSummary?.scope_2_calculated_co2e != null
+                      ? `${carbonSummary.scope_2_calculated_co2e.toLocaleString()} kg`
+                      : '—'}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    {carbonSummary?.scope_2_calculated_co2e != null
+                      ? `${(carbonSummary.scope_2_calculated_co2e / 1000).toFixed(4)} tCO₂e`
+                      : 'No Scope 2 items'}
+                  </p>
+                </div>
+
+                <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3 space-y-1">
+                  <span className="text-[11px] font-semibold text-emerald-800 uppercase">Total Calculated</span>
+                  <p className="text-base font-bold text-emerald-950 font-mono">
+                    {carbonSummary?.total_calculated_co2e != null
+                      ? `${carbonSummary.total_calculated_co2e.toLocaleString()} kg`
+                      : '—'}
+                  </p>
+                  <p className="text-[11px] text-emerald-700 font-mono font-medium">
+                    {carbonSummary?.total_calculated_co2e != null
+                      ? `${(carbonSummary.total_calculated_co2e / 1000).toFixed(4)} tCO₂e`
+                      : 'Awaiting calculation'}
+                  </p>
+                </div>
+              </div>
+
+              {carbonSummary && (
+                <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <span>
+                    Calculation Records: {carbonSummary.calculated_records} calculated, {carbonSummary.ineligible_records} ineligible, {carbonSummary.no_factor_records} no factor.
+                  </span>
+                  <span className="font-semibold text-emerald-700">
+                    Double-counting protected (Grid constituent used, Total excluded from sum)
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* 5C. CARBON ACCOUNTING LEDGER (Step 14) */}
+            <div className="bg-white border border-[#0F6B56]/30 rounded-xl p-5 shadow-2xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <div className="flex items-center space-x-2">
+                  <BookOpen className="w-4 h-4 text-[#0F6B56]" />
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Carbon Accounting Ledger (Step 14)
+                  </h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-[#0F6B56] border border-emerald-200">
+                    Audited Accounting Snapshot
+                  </span>
+                </div>
+                <button
+                  onClick={handlePostToLedger}
+                  disabled={isPostingLedger}
+                  className="px-3 py-1.5 bg-[#0F6B56] hover:bg-[#0c5544] disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition-colors shadow-2xs flex items-center space-x-1.5"
+                >
+                  <BookOpen className={`w-3.5 h-3.5 ${isPostingLedger ? 'animate-spin' : ''}`} />
+                  <span>{isPostingLedger ? 'Posting...' : 'Post to Accounting Ledger'}</span>
+                </button>
+              </div>
+
+              {/* Ledger Summary KPIs */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-500 uppercase">Posted Status</span>
+                  <p className="text-base font-bold text-slate-900 font-mono">
+                    {ledgerSummary?.posted_records || 0} Entries
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    {ledgerSummary?.excluded_records || 0} excluded &bull; {ledgerSummary?.superseded_records || 0} superseded
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-500 uppercase">Scope 1 Posted</span>
+                  <p className="text-base font-bold text-slate-900 font-mono">
+                    {ledgerSummary?.scope_1_posted_co2e != null
+                      ? `${ledgerSummary.scope_1_posted_co2e.toLocaleString()} kg`
+                      : '—'}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    {ledgerSummary?.scope_1_posted_co2e != null
+                      ? `${(ledgerSummary.scope_1_posted_co2e / 1000).toFixed(4)} tCO₂e`
+                      : '—'}
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-500 uppercase">Scope 2 Posted</span>
+                  <p className="text-base font-bold text-slate-900 font-mono">
+                    {ledgerSummary?.scope_2_posted_co2e != null
+                      ? `${ledgerSummary.scope_2_posted_co2e.toLocaleString()} kg`
+                      : '—'}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    {ledgerSummary?.scope_2_posted_co2e != null
+                      ? `${(ledgerSummary.scope_2_posted_co2e / 1000).toFixed(4)} tCO₂e`
+                      : '—'}
+                  </p>
+                </div>
+
+                <div className="bg-emerald-50/70 border border-emerald-300 rounded-xl p-3 space-y-1">
+                  <span className="text-[11px] font-semibold text-emerald-800 uppercase">Total Posted Footprint</span>
+                  <p className="text-base font-bold text-emerald-950 font-mono">
+                    {ledgerSummary?.total_posted_co2e != null
+                      ? `${ledgerSummary.total_posted_co2e.toLocaleString()} kg`
+                      : '—'}
+                  </p>
+                  <p className="text-[11px] text-emerald-700 font-mono font-medium">
+                    {ledgerSummary?.total_posted_co2e != null
+                      ? `${(ledgerSummary.total_posted_co2e / 1000).toFixed(4)} tCO₂e`
+                      : '—'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 5D. CARBON ACCOUNTING RECONCILIATION (Step 14) — Extracted vs Calculated */}
+            <div className="bg-white border border-purple-200 rounded-xl p-5 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center space-x-2">
+                  <Scale className="w-4 h-4 text-purple-600" />
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Carbon Accounting Reconciliation (Extracted vs Calculated)
+                  </h3>
+                  {reconciliation?.overall_status && (
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                      reconciliation.overall_status === 'MATCH'
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        : reconciliation.overall_status === 'DIFFERENCE'
+                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                        : 'bg-slate-100 text-slate-700 border border-slate-200'
+                    }`}>
+                      {reconciliation.overall_status}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] text-slate-400 font-mono">
+                  Exact Decimal (1 tCO₂e = 1000 kgCO₂e)
+                </span>
+              </div>
+
+              {/* Three-Column Reconciliation Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/70 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="py-2.5 px-4">Metric Scope</th>
+                      <th className="py-2.5 px-4 text-right">Extracted (tCO₂e)</th>
+                      <th className="py-2.5 px-4 text-right">Calculated / Posted</th>
+                      <th className="py-2.5 px-4 text-right">Difference</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-mono">
+                    {/* Scope 1 */}
+                    <tr className="hover:bg-slate-50/60">
+                      <td className="py-2.5 px-4 font-sans font-semibold text-slate-900">
+                        Scope 1 (Direct Fuel)
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-bold text-purple-900">
+                        {reconciliation?.scope_1?.extracted_value != null ? `${reconciliation.scope_1.extracted_value.toFixed(4)} t` : '—'}
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-bold text-emerald-900">
+                        {reconciliation?.scope_1?.calculated_value_t != null
+                          ? `${reconciliation.scope_1.calculated_value_t.toFixed(4)} t (${reconciliation.scope_1.calculated_value_kg?.toLocaleString()} kg)`
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-bold text-slate-700">
+                        {reconciliation?.scope_1?.difference_t != null
+                          ? `${reconciliation.scope_1.difference_t > 0 ? '+' : ''}${reconciliation.scope_1.difference_t.toFixed(4)} t`
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
+                          reconciliation?.scope_1?.status === 'MATCH'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-purple-50 text-purple-700 border border-purple-200'
+                        }`}>
+                          {reconciliation?.scope_1?.status || 'NO_DATA'}
+                        </span>
+                      </td>
+                    </tr>
+
+                    {/* Scope 2 */}
+                    <tr className="hover:bg-slate-50/60">
+                      <td className="py-2.5 px-4 font-sans font-semibold text-slate-900">
+                        Scope 2 (Electricity)
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-bold text-purple-900">
+                        {reconciliation?.scope_2?.extracted_value != null ? `${reconciliation.scope_2.extracted_value.toFixed(4)} t` : '—'}
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-bold text-emerald-900">
+                        {reconciliation?.scope_2?.calculated_value_t != null
+                          ? `${reconciliation.scope_2.calculated_value_t.toFixed(4)} t (${reconciliation.scope_2.calculated_value_kg?.toLocaleString()} kg)`
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-bold text-slate-700">
+                        {reconciliation?.scope_2?.difference_t != null
+                          ? `${reconciliation.scope_2.difference_t > 0 ? '+' : ''}${reconciliation.scope_2.difference_t.toFixed(4)} t`
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
+                          reconciliation?.scope_2?.status === 'MATCH'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-purple-50 text-purple-700 border border-purple-200'
+                        }`}>
+                          {reconciliation?.scope_2?.status || 'NO_DATA'}
+                        </span>
+                      </td>
+                    </tr>
+
+                    {/* Total */}
+                    <tr className="hover:bg-slate-50/60 bg-slate-50/30 font-bold">
+                      <td className="py-2.5 px-4 font-sans font-bold text-slate-900">
+                        Total GHG Footprint
+                      </td>
+                      <td className="py-2.5 px-4 text-right text-purple-950 font-extrabold">
+                        {reconciliation?.total?.extracted_value != null ? `${reconciliation.total.extracted_value.toFixed(4)} t` : '—'}
+                      </td>
+                      <td className="py-2.5 px-4 text-right text-emerald-950 font-extrabold">
+                        {reconciliation?.total?.calculated_value_t != null
+                          ? `${reconciliation.total.calculated_value_t.toFixed(4)} t (${reconciliation.total.calculated_value_kg?.toLocaleString()} kg)`
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 px-4 text-right text-slate-900 font-extrabold">
+                        {reconciliation?.total?.difference_t != null
+                          ? `${reconciliation.total.difference_t > 0 ? '+' : ''}${reconciliation.total.difference_t.toFixed(4)} t`
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
+                          reconciliation?.total?.status === 'MATCH'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : 'bg-purple-100 text-purple-800 border border-purple-300'
+                        }`}>
+                          {reconciliation?.total?.status || 'NO_DATA'}
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="text-[11px] text-slate-500">
+                * Note: Differences reflect discrepancy between verbatim document reporting and registry factor calculations. Neither value is altered.
+              </p>
             </div>
 
             {/* 6. SOURCE EVIDENCE ANCHORS (Top 5) */}

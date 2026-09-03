@@ -197,7 +197,77 @@ export const previewNormalizeActivity = async (payload) => {
   return response.data;
 };
 
+export const calculateActivityCarbon = async (activityDataId, forceRecalculate = false) => {
+  const response = await api.post('/carbon-calculations/calculate', {
+    activity_data_id: activityDataId,
+    force_recalculate: forceRecalculate,
+  });
+  return response.data;
+};
+
+export const getCarbonCalculations = async (params = {}) => {
+  const response = await api.get('/carbon-calculations', { params });
+  return response.data;
+};
+
+export const getCarbonCalculationById = async (calcId) => {
+  const response = await api.get(`/carbon-calculations/${calcId}`);
+  return response.data;
+};
+
+export const getDocumentCarbonCalculations = async (documentId) => {
+  const response = await api.get(`/documents/${documentId}/carbon-calculations`);
+  return response.data;
+};
+
+export const calculateDocumentCarbonEmissions = async (documentId) => {
+  const response = await api.post(`/documents/${documentId}/carbon-calculations/calculate`);
+  return response.data;
+};
+
+// ==========================================
+// Carbon Accounting Ledger (Step 14)
+// ==========================================
+
+export const postCarbonLedgerEntry = async (carbonCalculationId) => {
+  const response = await api.post('/carbon-ledger/post', {
+    carbon_calculation_id: carbonCalculationId,
+  });
+  return response.data;
+};
+
+export const postDocumentCarbonLedger = async (documentId) => {
+  const response = await api.post(`/documents/${documentId}/carbon-ledger/post`);
+  return response.data;
+};
+
+export const getCarbonLedger = async (params = {}) => {
+  const response = await api.get('/carbon-ledger', { params });
+  return response.data;
+};
+
+export const getCarbonLedgerEntry = async (id) => {
+  const response = await api.get(`/carbon-ledger/${id}`);
+  return response.data;
+};
+
+export const getDocumentCarbonLedger = async (documentId) => {
+  const response = await api.get(`/documents/${documentId}/carbon-ledger`);
+  return response.data;
+};
+
+export const getDocumentCarbonReconciliation = async (documentId) => {
+  const response = await api.get(`/documents/${documentId}/carbon-ledger/reconciliation`);
+  return response.data;
+};
+
+export const getCarbonLedgerSummary = async (params = {}) => {
+  const response = await api.get('/carbon-ledger/summary', { params });
+  return response.data;
+};
+
 export default api;
+
 
 
 

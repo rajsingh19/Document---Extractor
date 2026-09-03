@@ -22,7 +22,7 @@ class ActivityData(Base):
     activity_type = Column(String(100), nullable=False, index=True)
 
     # Category: ENERGY, FUEL, TRANSPORT, WATER, WASTE, OTHER
-    category = Column(String(50), nullable=False, index=True)
+    category = Column(String(50), nullable=False, default="OTHER", index=True)
 
     # Activity role: TOTAL, COMPONENT, SUPPORTING
     activity_role = Column(String(50), nullable=False, default="TOTAL", index=True)

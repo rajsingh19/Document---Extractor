@@ -5,11 +5,13 @@ import DocumentDetail from './pages/DocumentDetail';
 import EvidenceReport from './pages/EvidenceReport';
 import EmissionFactors from './pages/EmissionFactors';
 import ActivityDataPage from './pages/ActivityData';
+import CarbonCalculationsPage from './pages/CarbonCalculations';
+import CarbonLedger from './pages/CarbonLedger';
 import Metrics from './pages/Metrics';
 import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument, getAttentionItems } from './services/api';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('documents'); // 'documents' | 'metrics' | 'emission-factors'
+  const [activeTab, setActiveTab] = useState('documents'); // 'documents' | 'metrics' | 'emission-factors' | 'carbon-ledger'
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [reportDocId, setReportDocId] = useState(null);
   const [health, setHealth] = useState(null);
@@ -58,6 +60,20 @@ export default function App() {
 
     if (pathname === '/activity-data') {
       setActiveTab('activity-data');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      return;
+    }
+
+    if (pathname === '/carbon-calculations') {
+      setActiveTab('carbon-calculations');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      return;
+    }
+
+    if (pathname === '/carbon-ledger') {
+      setActiveTab('carbon-ledger');
       setSelectedDocument(null);
       setReportDocId(null);
       return;
@@ -247,6 +263,10 @@ export default function App() {
           <EmissionFactors />
         ) : activeTab === 'activity-data' ? (
           <ActivityDataPage />
+        ) : activeTab === 'carbon-calculations' ? (
+          <CarbonCalculationsPage />
+        ) : activeTab === 'carbon-ledger' ? (
+          <CarbonLedger />
         ) : activeTab === 'metrics' ? (
           <Metrics
             stats={stats}

@@ -48,11 +48,29 @@ from backend.app.schemas.activity_data import (
     ActivityDataResponse,
     ActivityDataListResponse,
 )
+from backend.app.models.carbon_calculation import CarbonCalculation
+from backend.app.schemas.carbon_calculation import (
+    CarbonCalculationRequest,
+    CarbonCalculationResponse,
+    CarbonCalculationListResponse,
+    DocumentCarbonCalculationSummary,
+)
+from backend.app.models.carbon_ledger import CarbonLedgerEntry
+from backend.app.schemas.carbon_ledger import (
+    CarbonLedgerPostRequest,
+    CarbonLedgerEntryResponse,
+    CarbonLedgerListResponse,
+    DocumentLedgerSummary,
+    LedgerReconciliationResponse,
+    LedgerAggregationResponse,
+)
+from backend.app.services.carbon_ledger import carbon_ledger_service
 from backend.app.services.evidence_report import evidence_report_service
 from backend.app.services.report_pdf import report_pdf_renderer
 from backend.app.services.emission_factor_service import emission_factor_service
 from backend.app.services.emission_factor_resolver import emission_factor_resolver
 from backend.app.services.activity_data_normalizer import activity_data_normalizer
+from backend.app.services.carbon_calculation import carbon_calculation_engine
 from backend.app.services.extraction_service import ExtractionPipelineService
 from backend.app.services.ocr_service import OCRService
 from backend.app.services.llm_service import LLMService
@@ -1099,6 +1117,201 @@ def get_document_activity_data(document_id: int, db: Session = Depends(get_db)):
         "total": len(records),
         "items": records
     }
+
+# ==========================================
+# Deterministic Carbon Calculation Endpoints (Step 13)
+# ==========================================
+
+@router.post("/carbon-calculations/calculate", response_model=CarbonCalculationResponse)
+def calculate_single_activity(
+    payload: CarbonCalculationRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Calculate CO2e emissions for a single canonical ActivityData record.
+    """
+    return carbon_calculation_engine.calculate_activity(db, payload)
+
+@router.get("/carbon-calculations", response_model=CarbonCalculationListResponse)
+def list_carbon_calculations(
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    activity_data_id: Optional[int] = Query(None, description="Filter by activity data ID"),
+    activity_type: Optional[str] = Query(None, description="Filter by activity type"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    reporting_year: Optional[int] = Query(None, description="Filter by reporting year"),
+    db: Session = Depends(get_db)
+):
+    """
+    List carbon calculation records with multi-parameter filtering.
+    """
+    query = db.query(CarbonCalculation)
+    if document_id is not None:
+        query = query.filter(CarbonCalculation.document_id == document_id)
+    if activity_data_id is not None:
+        query = query.filter(CarbonCalculation.activity_data_id == activity_data_id)
+    if activity_type:
+        query = query.filter(CarbonCalculation.activity_type == activity_type.strip().lower())
+    if scope:
+        query = query.filter(CarbonCalculation.scope == scope.strip().upper())
+    if status:
+        query = query.filter(CarbonCalculation.status == status.strip().upper())
+    if reporting_year is not None:
+        query = query.filter(CarbonCalculation.reporting_year == reporting_year)
+
+    records = query.order_by(CarbonCalculation.id.asc()).all()
+    return {
+        "total": len(records),
+        "items": records
+    }
+
+@router.get("/carbon-calculations/{calc_id}", response_model=CarbonCalculationResponse)
+def get_carbon_calculation_by_id(calc_id: int, db: Session = Depends(get_db)):
+    """
+    Retrieve single CarbonCalculation record by ID.
+    """
+    record = db.query(CarbonCalculation).filter(CarbonCalculation.id == calc_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Carbon calculation record not found")
+    return record
+
+@router.get("/documents/{document_id}/carbon-calculations", response_model=DocumentCarbonCalculationSummary)
+def get_document_carbon_calculations(document_id: int, db: Session = Depends(get_db)):
+    """
+    Retrieve aggregated carbon calculation summary for a document.
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return carbon_calculation_engine.calculate_document_emissions(db, document_id)
+
+@router.post("/documents/{document_id}/carbon-calculations/calculate", response_model=DocumentCarbonCalculationSummary)
+def calculate_document_carbon_emissions(document_id: int, db: Session = Depends(get_db)):
+    """
+    Batch calculate carbon emissions for all ActivityData associated with a document.
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return carbon_calculation_engine.calculate_document_emissions(db, document_id)
+
+
+# ==========================================
+# Deterministic Carbon Accounting Ledger Endpoints (Step 14)
+# ==========================================
+
+@router.post("/carbon-ledger/post", response_model=CarbonLedgerEntryResponse)
+def post_single_ledger_entry(
+    payload: CarbonLedgerPostRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Post a single CarbonCalculation into the accounting ledger.
+    """
+    try:
+        return carbon_ledger_service.post_calculation(db, payload.carbon_calculation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@router.post("/documents/{document_id}/carbon-ledger/post", response_model=DocumentLedgerSummary)
+def post_document_carbon_ledger(document_id: int, db: Session = Depends(get_db)):
+    """
+    Post all eligible calculations for a document into the accounting ledger.
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return carbon_ledger_service.post_document(db, document_id)
+
+@router.get("/carbon-ledger/summary", response_model=LedgerAggregationResponse)
+def get_carbon_ledger_summary(
+    reporting_year: Optional[int] = Query(None, description="Filter by reporting year"),
+    reporting_period: Optional[str] = Query(None, description="Filter by reporting period"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    activity_type: Optional[str] = Query(None, description="Filter by activity type"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve global or filtered accounting ledger summary.
+    """
+    return carbon_ledger_service.get_ledger_summary(
+        db,
+        reporting_year=reporting_year,
+        reporting_period=reporting_period,
+        scope=scope,
+        category=category,
+        activity_type=activity_type,
+    )
+
+@router.get("/carbon-ledger", response_model=CarbonLedgerListResponse)
+def list_carbon_ledger(
+    document_id: Optional[int] = Query(None, description="Filter by document ID"),
+    carbon_calculation_id: Optional[int] = Query(None, description="Filter by calculation ID"),
+    activity_type: Optional[str] = Query(None, description="Filter by activity type"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    reporting_year: Optional[int] = Query(None, description="Filter by reporting year"),
+    reporting_period: Optional[str] = Query(None, description="Filter by reporting period"),
+    accounting_status: Optional[str] = Query(None, description="Filter by accounting status"),
+    db: Session = Depends(get_db)
+):
+    """
+    List CarbonLedgerEntry records with multi-dimensional filtering.
+    """
+    query = db.query(CarbonLedgerEntry)
+    if document_id is not None:
+        query = query.filter(CarbonLedgerEntry.document_id == document_id)
+    if carbon_calculation_id is not None:
+        query = query.filter(CarbonLedgerEntry.carbon_calculation_id == carbon_calculation_id)
+    if activity_type:
+        query = query.filter(CarbonLedgerEntry.activity_type == activity_type.strip().lower())
+    if category:
+        query = query.filter(CarbonLedgerEntry.category == category.strip().upper())
+    if scope:
+        query = query.filter(CarbonLedgerEntry.scope == scope.strip().upper())
+    if reporting_year is not None:
+        query = query.filter(CarbonLedgerEntry.reporting_year == reporting_year)
+    if reporting_period:
+        query = query.filter(CarbonLedgerEntry.reporting_period == reporting_period)
+    if accounting_status:
+        query = query.filter(CarbonLedgerEntry.accounting_status == accounting_status.strip().upper())
+
+    records = query.order_by(CarbonLedgerEntry.id.asc()).all()
+    return {
+        "total": len(records),
+        "items": records
+    }
+
+@router.get("/carbon-ledger/{id}", response_model=CarbonLedgerEntryResponse)
+def get_carbon_ledger_entry_by_id(id: int, db: Session = Depends(get_db)):
+    """
+    Retrieve single CarbonLedgerEntry record by ID.
+    """
+    record = db.query(CarbonLedgerEntry).filter(CarbonLedgerEntry.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Carbon ledger entry not found")
+    return record
+
+@router.get("/documents/{document_id}/carbon-ledger", response_model=DocumentLedgerSummary)
+def get_document_carbon_ledger(document_id: int, db: Session = Depends(get_db)):
+    """
+    Retrieve document-level accounting ledger summary.
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return carbon_ledger_service.get_document_ledger(db, document_id)
+
+@router.get("/documents/{document_id}/carbon-ledger/reconciliation", response_model=LedgerReconciliationResponse)
+def get_document_carbon_reconciliation(document_id: int, db: Session = Depends(get_db)):
+    """
+    Retrieve deterministic reconciliation between extracted document metrics and calculated/posted ledger values.
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return carbon_ledger_service.get_document_reconciliation(db, document_id)
 
 @router.get("/stats", response_model=DashboardStatsResponse)
 def get_dashboard_stats(db: Session = Depends(get_db)):
