@@ -533,7 +533,119 @@ export const getGreenFinanceAssessmentPdfUrl = (assessmentId) => {
   return `/api/green-finance/assessments/${assessmentId}/pdf`;
 };
 
+// --- Carbon Credit Readiness & Project Eligibility Assessment API Methods (Step 20) ---
+
+export const getCarbonCreditFramework = async () => {
+  const response = await api.get('/carbon-credit/framework');
+  return response.data;
+};
+
+export const getCarbonCreditRequirements = async () => {
+  const response = await api.get('/carbon-credit/requirements');
+  return response.data;
+};
+
+export const createCarbonCreditAssessment = async (data) => {
+  const response = await api.post('/carbon-credit/assessments', data);
+  return response.data;
+};
+
+export const getCarbonCreditAssessments = async (params = {}) => {
+  const response = await api.get('/carbon-credit/assessments', { params });
+  return response.data;
+};
+
+export const getCarbonCreditAssessment = async (assessmentId) => {
+  const response = await api.get(`/carbon-credit/assessments/${assessmentId}`);
+  return response.data;
+};
+
+export const generateCarbonCreditAssessment = async (assessmentId) => {
+  const response = await api.post(`/carbon-credit/assessments/${assessmentId}/generate`);
+  return response.data;
+};
+
+export const updateCarbonCreditAssessmentStatus = async (assessmentId, status, notes = null) => {
+  const response = await api.post(`/carbon-credit/assessments/${assessmentId}/status`, { status, notes });
+  return response.data;
+};
+
+export const finalizeCarbonCreditAssessment = async (assessmentId) => {
+  const response = await api.post(`/carbon-credit/assessments/${assessmentId}/finalize`);
+  return response.data;
+};
+
+export const getCarbonCreditRequirementsList = async (assessmentId) => {
+  const response = await api.get(`/carbon-credit/assessments/${assessmentId}/requirements`);
+  return response.data;
+};
+
+export const getCarbonCreditEvidence = async (assessmentId) => {
+  const response = await api.get(`/carbon-credit/assessments/${assessmentId}/evidence`);
+  return response.data;
+};
+
+export const getCarbonCreditActions = async (assessmentId) => {
+  const response = await api.get(`/carbon-credit/assessments/${assessmentId}/actions`);
+  return response.data;
+};
+
+export const getCarbonCreditChecklist = async (assessmentId) => {
+  const response = await api.get(`/carbon-credit/assessments/${assessmentId}/checklist`);
+  return response.data;
+};
+
+export const getCarbonCreditMethodology = async (assessmentId) => {
+  const response = await api.get(`/carbon-credit/assessments/${assessmentId}/methodology`);
+  return response.data;
+};
+
+export const getCarbonCreditAssessmentPdfUrl = (assessmentId) => {
+  return `/api/carbon-credit/assessments/${assessmentId}/pdf`;
+};
+
+// ============================================================================
+// STEP 21: EMISSION FORECASTING API SERVICES
+// ============================================================================
+
+export const getEmissionsForecast = async (params = {}) => {
+  const response = await api.get('/emissions/forecast', { params });
+  return response.data;
+};
+
+export const createEmissionsForecast = async (data) => {
+  const response = await api.post('/emissions/forecast', data);
+  return response.data;
+};
+
+export const getForecastModels = async () => {
+  const response = await api.get('/emissions/forecast/models');
+  return response.data;
+};
+
+export const getForecastDataQuality = async (params = {}) => {
+  const response = await api.get('/emissions/forecast/data-quality', { params });
+  return response.data;
+};
+
+export const getForecastBacktest = async (params = {}) => {
+  const response = await api.get('/emissions/forecast/backtest', { params });
+  return response.data;
+};
+
+export const getForecastHistory = async (limit = 20) => {
+  const response = await api.get('/emissions/forecast/history', { params: { limit } });
+  return response.data;
+};
+
+export const getForecastById = async (forecastId) => {
+  const response = await api.get(`/emissions/forecast/${forecastId}`);
+  return response.data;
+};
+
+
 export default api;
+
 
 
 

@@ -14,6 +14,9 @@ import ComplianceReports from './pages/ComplianceReports';
 import ComplianceReportDetail from './pages/ComplianceReportDetail';
 import GreenFinance from './pages/GreenFinance';
 import GreenFinanceDetail from './pages/GreenFinanceDetail';
+import CarbonCredit from './pages/CarbonCredit';
+import CarbonCreditDetail from './pages/CarbonCreditDetail';
+import EmissionForecastPage from './pages/EmissionForecast';
 import Metrics from './pages/Metrics';
 import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument, getAttentionItems } from './services/api';
 
@@ -23,6 +26,8 @@ export default function App() {
   const [reportDocId, setReportDocId] = useState(null);
   const [complianceReportId, setComplianceReportId] = useState(null);
   const [greenFinanceAssessmentId, setGreenFinanceAssessmentId] = useState(null);
+  const [carbonCreditAssessmentId, setCarbonCreditAssessmentId] = useState(null);
+
   const [health, setHealth] = useState(null);
   const [stats, setStats] = useState(null);
   const [documents, setDocuments] = useState([]);
@@ -95,6 +100,14 @@ export default function App() {
       return;
     }
 
+    if (pathname === '/forecast') {
+      setActiveTab('forecast');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      return;
+    }
+
+
     if (pathname === '/reduction-opportunities') {
       setActiveTab('reduction-opportunities');
       setSelectedDocument(null);
@@ -146,6 +159,29 @@ export default function App() {
       setReportDocId(null);
       setComplianceReportId(null);
       setGreenFinanceAssessmentId(null);
+      setCarbonCreditAssessmentId(null);
+      return;
+    }
+
+    const ccaMatch = pathname.match(/^\/carbon-credit\/(\d+)$/);
+    if (ccaMatch) {
+      const ccaId = parseInt(ccaMatch[1], 10);
+      setCarbonCreditAssessmentId(ccaId);
+      setActiveTab('carbon-credit-detail');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      setComplianceReportId(null);
+      setGreenFinanceAssessmentId(null);
+      return;
+    }
+
+    if (pathname === '/carbon-credit') {
+      setActiveTab('carbon-credit');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      setComplianceReportId(null);
+      setGreenFinanceAssessmentId(null);
+      setCarbonCreditAssessmentId(null);
       return;
     }
 
@@ -154,8 +190,11 @@ export default function App() {
       setSelectedDocument(null);
       setReportDocId(null);
       setComplianceReportId(null);
+      setGreenFinanceAssessmentId(null);
+      setCarbonCreditAssessmentId(null);
       return;
     }
+
 
     // Default fallback to /documents
     setActiveTab('documents');
@@ -388,7 +427,33 @@ export default function App() {
               window.history.pushState(null, '', '/green-finance');
             }}
           />
+        ) : activeTab === 'carbon-credit' ? (
+          <CarbonCredit
+            onNavigate={(tab, ccaId) => {
+              if (ccaId) {
+                setCarbonCreditAssessmentId(ccaId);
+                setActiveTab('carbon-credit-detail');
+                window.history.pushState(null, '', `/carbon-credit/${ccaId}`);
+              } else {
+                setActiveTab(tab);
+                window.history.pushState(null, '', `/${tab}`);
+              }
+            }}
+          />
+        ) : activeTab === 'carbon-credit-detail' ? (
+          <CarbonCreditDetail
+            assessmentId={carbonCreditAssessmentId}
+            onNavigate={(tab) => {
+              setActiveTab('carbon-credit');
+              setCarbonCreditAssessmentId(null);
+              window.history.pushState(null, '', '/carbon-credit');
+            }}
+          />
+        ) : activeTab === 'forecast' ? (
+          <EmissionForecastPage />
         ) : activeTab === 'metrics' ? (
+
+
           <Metrics
             stats={stats}
             documents={documents}
