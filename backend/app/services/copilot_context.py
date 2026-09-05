@@ -94,7 +94,12 @@ def classify_intent(query: str, history: Optional[List[Dict[str, str]]] = None) 
         "what should i work on next", "what should we work on next",
         "which emission source needs attention most", "which source needs attention",
         "reduction priority", "reduction priorities", "reduction intelligence",
-        "top reduction priority", "highest reduction priority"
+        "top reduction priority", "highest reduction priority",
+        "reduction plan", "reduction roadmap", "reduction target", "reach my target",
+        "reach my reduction target", "reach our reduction target", "reach target",
+        "how far am i from my target", "how far are we from target",
+        "what is blocking my reduction target", "what is blocking my target",
+        "create a reduction plan", "plan to reduce"
     ]):
         return "ACTION_RECOMMENDATION"
 

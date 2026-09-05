@@ -24,7 +24,9 @@ import {
   Archive,
   BarChart3,
   Lightbulb,
-  Target
+  Target,
+  Compass,
+  ArrowRight
 } from 'lucide-react';
 import ExtractionTable from '../components/ExtractionTable';
 import EvidenceSection from '../components/EvidenceSection';
@@ -43,7 +45,8 @@ import {
   postDocumentCarbonLedger,
   getDocumentCarbonReconciliation,
   getReductionOpportunities,
-  getDocumentReductionIntelligence
+  getDocumentReductionIntelligence,
+  getReductionRoadmaps
 } from '../services/api';
 
 
@@ -88,21 +91,24 @@ export default function DocumentDetail({
 
   const [docOpportunities, setDocOpportunities] = useState([]);
   const [docPriorities, setDocPriorities] = useState([]);
+  const [docRoadmaps, setDocRoadmaps] = useState([]);
 
   const loadLedgerAndReconciliation = async (id) => {
     try {
-      const [ledData, reconData, oppsData, prioritiesData] = await Promise.all([
+      const [ledData, reconData, oppsData, prioritiesData, roadmapsData] = await Promise.all([
         getDocumentCarbonLedger(id).catch(() => null),
         getDocumentCarbonReconciliation(id).catch(() => null),
         getReductionOpportunities({ document_id: id }).catch(() => null),
         getDocumentReductionIntelligence(id).catch(() => null),
+        getReductionRoadmaps({ document_id: id }).catch(() => null),
       ]);
       if (ledData) setLedgerSummary(ledData);
       if (reconData) setReconciliation(reconData);
       if (oppsData) setDocOpportunities(oppsData.items || []);
       if (prioritiesData) setDocPriorities(prioritiesData.items || []);
+      if (roadmapsData) setDocRoadmaps(roadmapsData.items || roadmapsData || []);
     } catch (err) {
-      console.error('Failed to load ledger / reconciliation / opportunities / priorities:', err);
+      console.error('Failed to load ledger / reconciliation / opportunities / priorities / roadmaps:', err);
     }
   };
 
@@ -1070,6 +1076,78 @@ export default function DocumentDetail({
                 </div>
               </div>
             )}
+
+            {/* 5E-2. REDUCTION ROADMAP (Personalized Decarbonization Plan) */}
+            <div className="bg-white border border-[#E5E7EB] rounded-xl p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center space-x-2">
+                  <span className="p-1 rounded-md bg-emerald-50 text-emerald-700">
+                    <Compass className="w-4 h-4" />
+                  </span>
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                      Personalized Reduction Roadmap
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Deterministic decarbonization pathway answering "What should I do to reduce emissions?"
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.history.pushState(null, '', '/reduction-roadmap');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                  }}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100/70 px-2.5 py-1 rounded-md transition-colors"
+                >
+                  <span>{docRoadmaps && docRoadmaps.length > 0 ? 'View Roadmaps' : 'Build Roadmap'}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {docRoadmaps && docRoadmaps.length > 0 ? (
+                <div className="space-y-3">
+                  {docRoadmaps.slice(0, 1).map((rm) => (
+                    <div key={rm.id} className="p-3.5 bg-slate-50 rounded-lg border border-slate-200/80 space-y-2.5">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900">{rm.name}</span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                            Target: -{Number(rm.target_reduction_percent).toFixed(1)}%
+                          </span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                            {rm.target_status || 'ACTIVE'}
+                          </span>
+                        </div>
+                        <span className="text-xs text-slate-500">
+                          Baseline: <span className="font-semibold text-slate-800">{Number(rm.baseline_emissions_tco2e).toFixed(4)} tCO2e</span>
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs bg-white p-2.5 rounded border border-slate-100">
+                        <div>
+                          <span className="text-[10px] text-slate-500 uppercase block">Target Emissions</span>
+                          <span className="font-semibold text-slate-800">{Number(rm.target_emissions_tco2e).toFixed(4)} tCO2e</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 uppercase block">Required Reduction</span>
+                          <span className="font-bold text-amber-700">{Number(rm.reduction_gap_tco2e).toFixed(4)} tCO2e</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 uppercase block">Feasibility</span>
+                          <span className="font-medium text-slate-600">Not yet quantified</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200/60 flex items-center justify-between gap-3 text-xs text-slate-600">
+                  <span>No active roadmap for this document yet. Set a reduction target (e.g. 20%) to generate a 4-phase deterministic action plan.</span>
+                </div>
+              )}
+            </div>
 
             {/* 5F. REDUCTION OPPORTUNITIES (Linked to Document) */}
             {docOpportunities && docOpportunities.length > 0 && (

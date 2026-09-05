@@ -673,6 +673,50 @@ export const recalculateReductionIntelligence = async (documentId = null) => {
   return response.data;
 };
 
+// ============================================================================
+// STEP 22B: PERSONALIZED EMISSIONS REDUCTION ROADMAP API SERVICES
+// ============================================================================
+
+export const getReductionRoadmaps = async (params = {}) => {
+  const response = await api.get('/reduction-roadmaps', { params });
+  return response.data;
+};
+
+export const getReductionRoadmapById = async (roadmapId) => {
+  const response = await api.get(`/reduction-roadmaps/${roadmapId}`);
+  return response.data;
+};
+
+export const createReductionRoadmap = async (data) => {
+  const response = await api.post('/reduction-roadmaps', data);
+  return response.data;
+};
+
+export const regenerateReductionRoadmap = async (roadmapId) => {
+  const response = await api.post(`/reduction-roadmaps/${roadmapId}/generate`);
+  return response.data;
+};
+
+export const getReductionRoadmapProgress = async (roadmapId) => {
+  const response = await api.get(`/reduction-roadmaps/${roadmapId}/progress`);
+  return response.data;
+};
+
+export const updateReductionRoadmap = async (roadmapId, data) => {
+  const response = await api.patch(`/reduction-roadmaps/${roadmapId}`, data);
+  return response.data;
+};
+
+export const updateReductionRoadmapItemStatus = async (roadmapId, itemId, data) => {
+  const response = await api.patch(`/reduction-roadmaps/${roadmapId}/items/${itemId}`, data);
+  return response.data;
+};
+
+export const getReductionRoadmapEvents = async (roadmapId) => {
+  const response = await api.get(`/reduction-roadmaps/${roadmapId}/events`);
+  return response.data;
+};
+
 export default api;
 
 

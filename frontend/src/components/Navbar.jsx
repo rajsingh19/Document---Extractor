@@ -110,6 +110,18 @@ export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, i
               </button>
 
               <button
+                onClick={() => onSelectTab('reduction-roadmap')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'reduction-roadmap'
+                    ? 'bg-[#EAF7F2] text-[#0F6B56]'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Roadmap</span>
+              </button>
+
+              <button
                 onClick={() => onSelectTab('reduction-opportunities')}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
                   activeTab === 'reduction-opportunities'

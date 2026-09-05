@@ -7,8 +7,12 @@ from backend.app.models.carbon_credit import (
     CarbonCreditEvidence,
     CarbonCreditAssessmentEvent,
 )
-from backend.app.models.emission_forecast import EmissionForecast
 from backend.app.models.reduction_intelligence import ReductionPriority
+from backend.app.models.reduction_roadmap import (
+    ReductionRoadmap,
+    ReductionRoadmapItem,
+    ReductionRoadmapEvent,
+)
 
 __all__ = [
     "Document",
@@ -20,6 +24,9 @@ __all__ = [
     "CarbonCreditAssessmentEvent",
     "EmissionForecast",
     "ReductionPriority",
+    "ReductionRoadmap",
+    "ReductionRoadmapItem",
+    "ReductionRoadmapEvent",
 ]
 
 

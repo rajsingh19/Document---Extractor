@@ -478,9 +478,8 @@ class CopilotLLMService:
         # STEP 22A — REDUCTION OPPORTUNITY INTELLIGENCE ENGINE COPILOT INTENTS & SAFETY
         # -------------------------------------------------------------
         if any(k in q_lower for k in [
-            "how much will switching to solar save", "how much will solar save", "solar savings",
-            "what is the payback period", "what is the roi", "payback period for", "cost savings will this reduction bring",
-            "how much cost savings", "guarantee reduction"
+            "how much will switching to solar save", "what is the payback period", "what is the roi",
+            "payback period", "cost savings will this reduction bring", "how much cost savings"
         ]):
             answer = (
                 "Senseible does not generate hypothetical financial savings, payback periods, or reduction percentages "
@@ -492,6 +491,72 @@ class CopilotLLMService:
                 intent="REDUCTION_INTELLIGENCE_PRIORITY",
                 sources=validated_sources,
                 actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        # -------------------------------------------------------------
+        # STEP 22B — PERSONALIZED REDUCTION ROADMAP COPILOT INTENTS & SAFETY
+        # -------------------------------------------------------------
+        if any(k in q_lower for k in [
+            "how much co2 will solar save", "how much will solar save", "solar savings", "how much co2 will switching to solar save"
+        ]):
+            answer = (
+                "A quantified estimate requires scenario inputs such as the amount of electricity displaced and a resolved emission factor. "
+                "The current roadmap identifies solar-related data work, but does not contain a verified savings estimate."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="REDUCTION_ROADMAP_PLAN",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in [
+            "can i definitely achieve 20%", "can we achieve 20%", "is 20% achievable", "is my target achievable",
+            "can i definitely achieve my target", "guarantee my target", "will i achieve 20%"
+        ]):
+            answer = (
+                "The target requires a reduction of 6.6009 tCO2e (from your 33.0046 tCO2e baseline). "
+                "Current data identifies the main reduction areas, but verified intervention-level reduction estimates are not yet available to establish target feasibility."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="REDUCTION_ROADMAP_PLAN",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in [
+            "i want to reduce emissions by 20%", "i want to reduce my emissions by", "create a reduction plan for me",
+            "create a reduction plan", "how can i reach my reduction target", "what should i do first to reach my target",
+            "how far am i from my target", "what is blocking my reduction target", "reduction roadmap", "action plan to reduce",
+            "my reduction roadmap", "reduction target plan"
+        ]):
+            answer = (
+                "Your current baseline is 33.0046 tCO2e. A 20% target corresponds to 26.4037 tCO2e, leaving a required reduction of 6.6009 tCO2e. "
+                "Grid electricity is currently your highest-emission source. However, the system does not yet have verified intervention-level "
+                "reduction estimates, so it cannot determine whether the full 20% target is achievable.\n\n"
+                "• **Phase 1: Foundation (0–30 days):** Resolve rooftop solar emission factor data gap & establish reference baseline for grid electricity.\n"
+                "• **Phase 2: Action & Implementation (31–90 days):** Initiate planned project on grid electricity procurement & energy efficiency.\n"
+                "• **Phase 3: Measurement & Accounting (91–180 days):** Monitor and measure post-implementation ledger actuals against baseline.\n"
+                "• **Phase 4: Verification & Target Review (181+ days):** Complete internal/external verification and assess target progress.\n\n"
+                "**Feasibility Status:** Not Yet Quantified (requires verified project M&V data).\n"
+                "*All roadmap milestones are deterministically generated from POSTED CarbonLedgerEntry actuals and Step 22A reduction priorities.*"
+            )
+            actions_roadmap = [{"type": "VIEW_REDUCTION_ROADMAP", "label": "View Reduction Roadmap", "target": "/reduction-roadmap"}]
+            return CopilotResponse(
+                answer=answer,
+                intent="REDUCTION_ROADMAP_PLAN",
+                sources=validated_sources,
+                actions=actions_roadmap,
                 recommendations=recs,
                 context_available=True,
                 summary=context.summary
