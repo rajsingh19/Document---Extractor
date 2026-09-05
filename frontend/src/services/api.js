@@ -818,4 +818,78 @@ export const explainAgentAction = async (actionId) => {
 
 export const getAgentActionExplanation = explainAgentAction;
 
+// ===========================================================================
+// STEP 24 — INDUSTRY BENCHMARKING & INTELLIGENCE API CLIENT
+// ===========================================================================
+
+export const getBusinessProfile = async () => {
+  const response = await api.get('/benchmarks/profile');
+  return response.data;
+};
+
+export const updateBusinessProfile = async (profileData) => {
+  const response = await api.put('/benchmarks/profile', profileData);
+  return response.data;
+};
+
+export const getBenchmarkEligibility = async (params = {}) => {
+  const response = await api.get('/benchmarks/eligibility', { params });
+  return response.data;
+};
+
+export const evaluateBenchmarks = async (data = {}, params = {}) => {
+  const response = await api.post('/benchmarks/evaluate', data, { params });
+  return response.data;
+};
+
+export const recalculateBenchmarks = async (params = {}) => {
+  const response = await api.post('/benchmarks/recalculate', null, { params });
+  return response.data;
+};
+
+export const getBenchmarks = async (params = {}) => {
+  const response = await api.get('/benchmarks', { params });
+  return response.data;
+};
+
+export const getBenchmarkDetail = async (benchmarkId) => {
+  const response = await api.get(`/benchmarks/${benchmarkId}`);
+  return response.data;
+};
+
+export const getBenchmarkSummary = async (params = {}) => {
+  const response = await api.get('/benchmarks/summary', { params });
+  return response.data;
+};
+
+export const getBenchmarkComparisons = async (params = {}) => {
+  const response = await api.get('/benchmarks/comparisons', { params });
+  return response.data;
+};
+
+export const getBenchmarkComparisonDetail = async (comparisonId) => {
+  const response = await api.get(`/benchmarks/comparisons/${comparisonId}`);
+  return response.data;
+};
+
+export const getBenchmarkInsights = async (params = {}) => {
+  const response = await api.get('/benchmarks/insights', { params });
+  return response.data;
+};
+
+export const getBenchmarkDataQuality = async () => {
+  const response = await api.get('/benchmarks/data-quality');
+  return response.data;
+};
+
+export const getBenchmarkSources = async (params = {}) => {
+  const response = await api.get('/benchmarks/sources', { params });
+  return response.data;
+};
+
+export const getBenchmarkHistory = async (params = {}) => {
+  const response = await api.get('/benchmarks/history', { params });
+  return response.data;
+};
+
 export default api;

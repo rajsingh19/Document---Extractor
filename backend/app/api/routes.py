@@ -2574,3 +2574,7 @@ def get_copilot_attention(
     return copilot_attention_service.get_attention_items(db)
 
 
+from backend.app.api.industry_benchmark import router as benchmark_router
+router.include_router(benchmark_router)
+
+

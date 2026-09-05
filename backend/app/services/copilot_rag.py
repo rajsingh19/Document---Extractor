@@ -682,7 +682,27 @@ class CopilotRAGRouter:
         if any(k in q for k in ["what changed recently", "what changed between periods", "what changed", "recent changes", "did my emissions change", "changes in footprint"]):
             return ParsedQueryIntent(retrieval_mode="WHAT_CHANGED", requested_period=requested_period)
 
+        # Step 24 — Industry Benchmarking Intents (Patches 1–14)
+        if any(k in q for k in ["how do i compare with my industry", "how do we compare with our industry", "how do we compare", "how do i compare", "industry comparison", "industry benchmark summary", "show benchmarks", "benchmark overview", "industry intelligence"]):
+            return ParsedQueryIntent(retrieval_mode="BENCHMARK_SUMMARY", requested_period=requested_period)
 
+        if any(k in q for k in ["what is my biggest benchmark gap", "where am i above benchmark", "where are we above benchmark", "biggest benchmark gap", "largest benchmark gap", "benchmark gaps", "metrics above benchmark", "above benchmark"]):
+            return ParsedQueryIntent(retrieval_mode="BENCHMARK_GAP", requested_period=requested_period)
+
+        if any(k in q for k in ["what benchmark are you using", "what is the benchmark source", "benchmark provenance", "benchmark source", "who is the source of the benchmark", "where did the benchmark come from", "benchmark dataset", "benchmark version"]):
+            return ParsedQueryIntent(retrieval_mode="BENCHMARK_SOURCE", requested_period=requested_period)
+
+        if any(k in q for k in ["where am i below benchmark", "where are we below benchmark", "benchmark strengths", "benchmark strength", "below benchmark", "what are my benchmark strengths"]):
+            return ParsedQueryIntent(retrieval_mode="BENCHMARK_STRENGTH", requested_period=requested_period)
+
+        if any(k in q for k in ["benchmark limitation", "why is gap percentage null", "zero benchmark", "benchmark calculation limitation", "is the benchmark achievable", "can i reach the benchmark"]):
+            return ParsedQueryIntent(retrieval_mode="BENCHMARK_LIMITATION", requested_period=requested_period)
+
+        if any(k in q for k in ["who are my peers", "peer group", "peer comparison", "peer companies", "who am i being compared to", "peer matching", "industry peers", "competitors", "competitor"]):
+            return ParsedQueryIntent(retrieval_mode="PEER_COMPARISON", requested_period=requested_period)
+
+        if any(k in q for k in ["why am i above the benchmark", "why are we above benchmark", "why above benchmark", "what should i improve based on the benchmark", "what should we improve based on the benchmark"]):
+            return ParsedQueryIntent(retrieval_mode="WHY_ABOVE_BENCHMARK", requested_period=requested_period)
 
         # 6. Metric Inventory
         if any(k in q for k in ["what sustainability metrics can you extract", "what sustainability metrics are present", "which sustainability metrics do we currently have", "what metrics are in this document", "sustainability metrics present"]):

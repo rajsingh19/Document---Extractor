@@ -22,6 +22,11 @@ from backend.app.models.proactive_agent import (
     AgentAction,
     AgentActionEvent,
 )
+from backend.app.models.industry_benchmark import (
+    BusinessProfile,
+    IndustryBenchmark,
+    BenchmarkComparison,
+)
 
 __all__ = [
     "Document",
@@ -41,6 +46,9 @@ __all__ = [
     "ScenarioResult",
     "AgentAction",
     "AgentActionEvent",
+    "BusinessProfile",
+    "IndustryBenchmark",
+    "BenchmarkComparison",
 ]
 
 

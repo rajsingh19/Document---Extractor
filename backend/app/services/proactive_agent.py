@@ -165,6 +165,9 @@ class ProactiveAgentService:
         # G. Evaluate Step 21 Predictive Forecast Signal (Labeled: FORECAST — NOT ACTUAL)
         self._gather_forecast_actions(db, document_id, candidate_actions)
 
+        # H. Evaluate Step 24 Industry Benchmark Signals (Single Source of Priority Truth, Patch 6)
+        self._gather_benchmark_signals(db, document_id, candidate_actions)
+
         # Reconcile candidates with persistent AgentAction table (Idempotent Deduplication, Patch 7)
         actions_created = 0
         actions_updated = 0
@@ -772,6 +775,105 @@ class ProactiveAgentService:
                 })
         except Exception as e:
             logger.info(f"Forecast evaluation skipped or unavailable: {e}")
+
+    def _gather_benchmark_signals(
+        self,
+        db: Session,
+        document_id: Optional[int],
+        candidates: List[Dict[str, Any]]
+    ):
+        """
+        Step 24 Industry Benchmark Signals (Single Source of Priority Truth, Patch 6).
+        Consumes benchmark insights when actual emissions are above benchmark, but NEVER
+        overrides or replaces Step 22A priority scores. References benchmark_comparison_id
+        and reduction_intelligence_id.
+        """
+        try:
+            from backend.app.models.industry_benchmark import BenchmarkComparison
+            from backend.app.models.reduction_intelligence import ReductionPriority
+
+            # Look for active benchmark comparisons where actual performance is WORSE_THAN_BENCHMARK
+            query = db.query(BenchmarkComparison).filter(
+                BenchmarkComparison.classification == "WORSE_THAN_BENCHMARK"
+            )
+            if document_id:
+                query = query.filter(BenchmarkComparison.source_document_id == document_id)
+
+            gaps = query.all()
+            if not gaps:
+                return
+
+            # Align with 22A reduction priorities to respect priority truth
+            priorities = db.query(ReductionPriority).all()
+            priority_map = {p.activity_type.lower(): p for p in priorities if p.activity_type}
+
+            for g in gaps:
+                metric_clean = g.metric_name.replace("_", " ").title()
+                matched_22a = None
+                for act_key, p in priority_map.items():
+                    if act_key in g.metric_name.lower():
+                        matched_22a = p
+                        break
+                if not matched_22a:
+                    for p in priorities:
+                        if p.scope and (p.scope.lower() in g.metric_name.lower() or g.metric_name.lower() in p.scope.lower()):
+                            matched_22a = p
+                            break
+
+                # Inherit priority score from 22A if aligned, or use standard informational/medium score
+                priority_score = float(matched_22a.priority_score or 50.0) if matched_22a else 50.0
+                priority_level = matched_22a.priority_level if matched_22a else "MEDIUM"
+                priority_source = "REDUCTION_INTELLIGENCE" if matched_22a else "BENCHMARK_SIGNAL"
+
+                cond_code = f"BENCHMARK_GAP_{g.metric_name.upper()}_{g.id}"
+                dedup_key = self._build_dedup_key(
+                    "BENCHMARK_GAP", "BENCHMARK", "BENCHMARK_COMPARISON",
+                    str(g.id), str(document_id or ""), cond_code
+                )
+
+                gap_val = float(g.gap or 0.0)
+                bench_val = float(g.benchmark_value or 0.0)
+                bus_val = float(g.business_value or 0.0)
+                unit_str = g.metric_unit or "tCO2e"
+                pct_text = f" (+{float(g.gap_percentage):.1f}%)" if g.gap_percentage is not None else ""
+
+                what_text = f"Measured {metric_clean} of {bus_val:.4f} {unit_str} is above peer benchmark of {bench_val:.4f} {unit_str}{pct_text}."
+                why_text = f"Benchmark context supports an existing reduction priority for {metric_clean} (Gap: {gap_val:+.4f} {unit_str})."
+                next_text = f"Review operational consumption and efficiency opportunities for {metric_clean} alongside Step 22A recommendations."
+                evidence_text = f"BenchmarkComparison #{g.id} ({g.benchmark_version or '1.0'}, {g.source_name or 'Curated Benchmark'}) vs posted actual ledger."
+                follow_up_text = "Re-evaluate peer benchmark comparison after operational intervention."
+                limitation_text = "This comparison does not establish that the benchmark is achievable for your business."
+
+                candidates.append({
+                    "document_id": document_id,
+                    "action_type": "BENCHMARK_GAP",
+                    "category": "BENCHMARK",
+                    "queue_type": "REDUCTION",
+                    "priority": priority_level,
+                    "priority_score": priority_score,
+                    "priority_source": priority_source,
+                    "deterministic_score": priority_score,
+                    "title": f"Review {metric_clean} Against Industry Benchmark",
+                    "summary": why_text,
+                    "why_it_matters": why_text,
+                    "recommended_action": next_text,
+                    "what": what_text,
+                    "why": why_text,
+                    "next_step": next_text,
+                    "evidence": evidence_text,
+                    "follow_up": follow_up_text,
+                    "limitation": limitation_text,
+                    "source_type": "BENCHMARK_COMPARISON",
+                    "source_id": str(g.id),
+                    "source_document_id": document_id,
+                    "metric_value": abs(gap_val),
+                    "metric_unit": unit_str,
+                    "dependency_status": "READY",
+                    "due_context": "Benchmarking",
+                    "dedup_key": dedup_key,
+                })
+        except Exception as e:
+            logger.warning(f"Error gathering benchmark signals in proactive agent: {e}")
 
     # -------------------------------------------------------------------------
     # 3. DEPENDENCY LINKING (Patch 3)

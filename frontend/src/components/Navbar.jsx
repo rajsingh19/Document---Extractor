@@ -134,6 +134,18 @@ export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, i
               </button>
 
               <button
+                onClick={() => onSelectTab('industry-benchmarks')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'industry-benchmarks'
+                    ? 'bg-[#EAF7F2] text-[#0F6B56]'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5 text-[#0F6B56]" />
+                <span>Industry Intelligence</span>
+              </button>
+
+              <button
                 onClick={() => onSelectTab('ai-agent')}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
                   activeTab === 'ai-agent'

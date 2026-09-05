@@ -24,7 +24,7 @@ import {
   ChevronRight,
   Sparkles
 } from 'lucide-react';
-import { getCarbonDashboard, getDocuments, getAgentBrief } from '../services/api';
+import { getCarbonDashboard, getDocuments, getAgentBrief, getBenchmarkSummary } from '../services/api';
 
 export default function CarbonDashboard({ onNavigate }) {
   const [data, setData] = useState(null);
@@ -32,6 +32,7 @@ export default function CarbonDashboard({ onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [agentBrief, setAgentBrief] = useState(null);
+  const [benchmarkSummary, setBenchmarkSummary] = useState(null);
 
   // Filters
   const [selectedYear, setSelectedYear] = useState('');
@@ -46,7 +47,17 @@ export default function CarbonDashboard({ onNavigate }) {
   useEffect(() => {
     fetchDocumentsList();
     fetchAgentBrief();
+    fetchBenchmarkSummary();
   }, []);
+
+  const fetchBenchmarkSummary = async () => {
+    try {
+      const bSum = await getBenchmarkSummary();
+      setBenchmarkSummary(bSum);
+    } catch (err) {
+      console.warn("Failed to load benchmark summary for dashboard", err);
+    }
+  };
 
   const fetchAgentBrief = async () => {
     try {
@@ -361,6 +372,31 @@ export default function CarbonDashboard({ onNavigate }) {
           <p className="text-xs text-slate-500 mt-1 truncate" title={data?.summary?.latest_reporting_period || 'N/A'}>
             Latest: <span className="font-medium text-slate-700">{data?.summary?.latest_reporting_period || 'None'}</span>
           </p>
+        </div>
+
+        {/* Industry Benchmark Compact Card (Section 30) */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-500 mb-2">
+              <span className="text-xs font-semibold uppercase tracking-wider">Industry Benchmark</span>
+              <BarChart3 className="w-4 h-4 text-[#0F6B56]" />
+            </div>
+            <div className="text-sm font-bold text-slate-900">
+              {benchmarkSummary?.worse_count ? `${benchmarkSummary.worse_count} Above Benchmark` : 'Benchmarks Active'}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {benchmarkSummary?.top_gaps?.[0] ?
+                `Primary gap: ${benchmarkSummary.top_gaps[0].metric_name.replace(/_/g, ' ')}` :
+                'Peer comparison available'}
+            </p>
+          </div>
+          <button
+            onClick={() => onNavigate && onNavigate('/benchmarks')}
+            className="mt-3 text-xs font-semibold text-[#0F6B56] hover:text-[#0c5645] flex items-center gap-1 pt-2 border-t border-slate-100"
+          >
+            <span>View Industry Intelligence</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 

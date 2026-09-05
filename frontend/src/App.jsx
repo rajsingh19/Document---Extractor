@@ -21,6 +21,7 @@ import ReductionIntelligence from './pages/ReductionIntelligence';
 import ReductionRoadmap from './pages/ReductionRoadmap';
 import EmissionScenarios from './pages/EmissionScenarios';
 import AgentCenter from './pages/AgentCenter';
+import IndustryBenchmarking from './pages/IndustryBenchmarking';
 import Metrics from './pages/Metrics';
 
 import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument, getAttentionItems } from './services/api';
@@ -230,6 +231,16 @@ export default function App() {
       return;
     }
 
+    if (pathname === '/benchmarks' || pathname === '/industry-benchmarks') {
+      setActiveTab('industry-benchmarks');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      setComplianceReportId(null);
+      setGreenFinanceAssessmentId(null);
+      setCarbonCreditAssessmentId(null);
+      return;
+    }
+
     if (pathname === '/metrics') {
 
       setActiveTab('metrics');
@@ -374,6 +385,8 @@ export default function App() {
     setActiveTab(tab);
     if (tab === 'ai-agent') {
       window.history.pushState(null, '', '/agent');
+    } else if (tab === 'industry-benchmarks') {
+      window.history.pushState(null, '', '/benchmarks');
     } else {
       window.history.pushState(null, '', `/${tab}`);
     }
@@ -525,6 +538,10 @@ export default function App() {
           />
         ) : activeTab === 'emission-scenarios' ? (
           <EmissionScenarios />
+        ) : activeTab === 'industry-benchmarks' ? (
+          <IndustryBenchmarking
+            onSelectDocument={handleSelectDocument}
+          />
         ) : activeTab === 'ai-agent' ? (
           <AgentCenter
             onSelectDocument={handleSelectDocument}

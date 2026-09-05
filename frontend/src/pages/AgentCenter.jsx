@@ -19,7 +19,8 @@ import {
   ChevronRight,
   Info,
   Check,
-  Ban
+  Ban,
+  BarChart3
 } from 'lucide-react';
 import { 
   getAgentBrief, 
@@ -28,12 +29,14 @@ import {
   startAgentAction, 
   completeAgentAction, 
   dismissAgentAction, 
-  explainAgentAction 
+  explainAgentAction,
+  getBenchmarkSummary
 } from '../services/api';
 
 export default function AgentCenter({ onSelectDocument, onOpenCopilotQuery }) {
   const [brief, setBrief] = useState(null);
   const [actions, setActions] = useState([]);
+  const [benchmarkSummary, setBenchmarkSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [actionInProgressId, setActionInProgressId] = useState(null);
@@ -50,12 +53,14 @@ export default function AgentCenter({ onSelectDocument, onOpenCopilotQuery }) {
   const loadAgentData = useCallback(async () => {
     try {
       setLoading(true);
-      const [briefData, actionsData] = await Promise.all([
+      const [briefData, actionsData, benchData] = await Promise.all([
         getAgentBrief(),
-        getAgentActions({ limit: 100 })
+        getAgentActions({ limit: 100 }),
+        getBenchmarkSummary().catch(() => null)
       ]);
       setBrief(briefData);
       setActions(actionsData.actions || []);
+      setBenchmarkSummary(benchData);
     } catch (err) {
       console.error('Failed to load agent data:', err);
     } finally {
@@ -246,6 +251,27 @@ export default function AgentCenter({ onSelectDocument, onOpenCopilotQuery }) {
               <span className="text-base font-bold text-emerald-700">{brief?.ready_actions?.length || 0}</span>
               <span className="text-3xs font-semibold px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded">READY</span>
             </div>
+          </div>
+
+          {/* Benchmark Signals (Section 31 & Patch 6) */}
+          <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-100 col-span-2 sm:col-span-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-[#0F6B56]" />
+              <span className="text-xs font-semibold text-slate-700">Benchmark Signals:</span>
+              <span className="text-xs text-slate-600">
+                {benchmarkSummary?.worse_count ? `${benchmarkSummary.worse_count} metrics above peer benchmark` : 'All compared metrics within or below benchmark'}
+              </span>
+              <span className="text-[10px] text-slate-400 italic">
+                (Provides external context; distinct from Step 22A priority scores)
+              </span>
+            </div>
+            <a
+              href="/benchmarks"
+              className="text-xs font-semibold text-[#0F6B56] hover:text-[#0c5645] flex items-center gap-1"
+            >
+              <span>View Industry Intelligence</span>
+              <ChevronRight className="w-3 h-3" />
+            </a>
           </div>
         </div>
       </div>

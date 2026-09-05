@@ -53,7 +53,9 @@ import {
   startAgentAction,
   completeAgentAction,
   dismissAgentAction,
-  getAgentActionExplanation
+  getAgentActionExplanation,
+  getBenchmarkComparisons,
+  evaluateBenchmarks
 } from '../services/api';
 
 
@@ -101,8 +103,18 @@ export default function DocumentDetail({
   const [docPriorities, setDocPriorities] = useState([]);
   const [docRoadmaps, setDocRoadmaps] = useState([]);
   const [docActions, setDocActions] = useState([]);
+  const [docBenchmarkComparisons, setDocBenchmarkComparisons] = useState([]);
   const [loadingActions, setLoadingActions] = useState(false);
   const [explainingAction, setExplainingAction] = useState(null);
+
+  const loadBenchmarkData = async (id) => {
+    try {
+      const res = await getBenchmarkComparisons({ document_id: id });
+      setDocBenchmarkComparisons(res.comparisons || []);
+    } catch (err) {
+      console.warn("Failed to load document benchmark comparisons:", err);
+    }
+  };
 
   const loadAgentActions = async (id) => {
     setLoadingActions(true);
@@ -166,6 +178,7 @@ export default function DocumentDetail({
       if (oppsData) setDocOpportunities(oppsData.items || []);
       if (prioritiesData) setDocPriorities(prioritiesData.items || []);
       if (roadmapsData) setDocRoadmaps(roadmapsData.items || roadmapsData || []);
+      await loadBenchmarkData(id);
     } catch (err) {
       console.error('Failed to load ledger / reconciliation / opportunities / priorities / roadmaps:', err);
     }
@@ -343,6 +356,7 @@ export default function DocumentDetail({
 
   const sidebarNavItems = [
     { id: 'overview', label: 'Overview', icon: FileText },
+    { id: 'benchmarks', label: 'Industry Benchmark Context', icon: BarChart3 },
     { id: 'agent_actions', label: `AI Agent Actions${docActions.length ? ` (${docActions.length})` : ''}`, icon: Sparkles },
     { id: 'evidence_report', label: 'Evidence Report', icon: FileText },
     { id: 'energy', label: 'Energy & Emissions', icon: Zap },
@@ -598,6 +612,99 @@ export default function DocumentDetail({
                 ))}
               </div>
             )}
+          </div>
+        ) : activeSection === 'benchmarks' ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between bg-white p-4 border border-[#E5E7EB] rounded-xl shadow-2xs">
+              <div className="flex items-center space-x-2">
+                <BarChart3 className="w-4 h-4 text-[#0F6B56]" />
+                <span className="text-xs font-bold text-slate-900">
+                  Industry Benchmark Context — Scoped to Document #{doc.id}
+                </span>
+              </div>
+              <button
+                onClick={() => setActiveSection('overview')}
+                className="text-xs text-[#0F6B56] font-semibold hover:underline"
+              >
+                &larr; Back to Overview Dashboard
+              </button>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Document Performance vs Benchmark</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Evaluated exclusively against this document's verified posted carbon ledger entries.
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    await evaluateBenchmarks({ document_id: doc.id, force_refresh: true });
+                    await loadBenchmarkData(doc.id);
+                  }}
+                  className="px-3 py-1.5 text-xs font-semibold text-white bg-[#0F6B56] hover:bg-[#0c5645] rounded-lg transition-colors flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Evaluate Document</span>
+                </button>
+              </div>
+
+              {docBenchmarkComparisons.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-500">
+                  No benchmark comparison records found for this document. Ensure carbon ledger entries are posted.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-200 text-xs">
+                    <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-[10px]">
+                      <tr>
+                        <th className="px-4 py-2.5 text-left">Metric</th>
+                        <th className="px-4 py-2.5 text-right">Document Actual</th>
+                        <th className="px-4 py-2.5 text-right">Benchmark</th>
+                        <th className="px-4 py-2.5 text-right">Gap</th>
+                        <th className="px-4 py-2.5 text-right">Gap %</th>
+                        <th className="px-4 py-2.5 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {docBenchmarkComparisons.map((c) => {
+                        const isWorse = c.classification === 'WORSE_THAN_BENCHMARK';
+                        const isBetter = c.classification === 'BETTER_THAN_BENCHMARK';
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-50">
+                            <td className="px-4 py-2.5 font-medium text-slate-900">
+                              {c.metric_name.replace(/_/g, ' ').toUpperCase()}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-semibold text-slate-800">
+                              {parseFloat(c.business_value).toFixed(2)} {c.metric_unit}
+                            </td>
+                            <td className="px-4 py-2.5 text-right text-slate-600">
+                              {parseFloat(c.benchmark_value).toFixed(2)} {c.metric_unit}
+                            </td>
+                            <td className={`px-4 py-2.5 text-right font-semibold ${isWorse ? 'text-rose-600' : isBetter ? 'text-emerald-600' : 'text-slate-600'}`}>
+                              {parseFloat(c.gap) > 0 ? `+${parseFloat(c.gap).toFixed(2)}` : parseFloat(c.gap).toFixed(2)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right text-slate-600 font-mono text-[11px]">
+                              {c.gap_percentage !== null ? `${parseFloat(c.gap_percentage) > 0 ? '+' : ''}${parseFloat(c.gap_percentage).toFixed(1)}%` : 'N/A'}
+                            </td>
+                            <td className="px-4 py-2.5 text-center">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                                isWorse ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                                isBetter ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                'bg-slate-100 text-slate-700 border border-slate-200'
+                              }`}>
+                                {isWorse ? 'Above Benchmark' : isBetter ? 'Below Benchmark' : 'Within Benchmark'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         ) : activeSection !== 'overview' ? (
           <div className="space-y-4">
