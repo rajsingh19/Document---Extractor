@@ -147,6 +147,7 @@ from backend.app.api.emission_forecast import router as emission_forecast_router
 from backend.app.api.reduction_intelligence import router as reduction_intelligence_router
 from backend.app.api.reduction_roadmap import router as reduction_roadmap_router
 from backend.app.api.emission_scenario import router as emission_scenario_router
+from backend.app.api.proactive_agent import router as proactive_agent_router
 from backend.app.utils.helpers import generate_unique_filename, parse_period_key
 from backend.app.utils.sample_generator import (
     generate_sample_electricity_bill,
@@ -161,6 +162,7 @@ router.include_router(emission_forecast_router)
 router.include_router(reduction_intelligence_router)
 router.include_router(reduction_roadmap_router)
 router.include_router(emission_scenario_router)
+router.include_router(proactive_agent_router)
 
 pipeline_service = ExtractionPipelineService()
 

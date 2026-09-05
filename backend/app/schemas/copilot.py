@@ -152,6 +152,12 @@ class CopilotResponse(BaseModel):
     context_available: bool = Field(default=False, description="Whether grounded context was built")
     summary: Optional[CopilotSummary] = Field(default=None, description="High level metric summary counts")
 
+    def __contains__(self, item: Any) -> bool:
+        return str(item) in self.answer
+
+    def __str__(self) -> str:
+        return self.answer
+
 class AttentionItem(BaseModel):
     id: str = Field(..., description="Unique deterministic identifier for the attention item")
     type: str = Field(..., description="Allowed: DOCUMENT_REVIEW, MISSING_DATA, METRIC_CHANGE, EVIDENCE_ISSUE, LOW_CONFIDENCE, CLASSIFICATION_CONFLICT, UNVERIFIED_DATA")

@@ -759,4 +759,63 @@ export const archiveEmissionScenario = async (scenarioId) => {
   return response.data;
 };
 
+// --- Proactive AI Sustainability Agent API Methods (Step 23) ---
+
+export const getAgentBrief = async (params = {}) => {
+  const response = await api.get('/agent/brief', { params });
+  return response.data;
+};
+
+export const runAgent = async (data = {}) => {
+  const response = await api.post('/agent/run', data);
+  return response.data;
+};
+
+export const getAgentStatus = async () => {
+  const response = await api.get('/agent/status');
+  return response.data;
+};
+
+export const getAgentActions = async (params = {}) => {
+  const response = await api.get('/agent/actions', { params });
+  return response.data;
+};
+
+export const getAgentAction = async (actionId) => {
+  const response = await api.get(`/agent/actions/${actionId}`);
+  return response.data;
+};
+
+export const patchAgentAction = async (actionId, data) => {
+  const response = await api.patch(`/agent/actions/${actionId}`, data);
+  return response.data;
+};
+
+export const startAgentAction = async (actionId, reason = null) => {
+  const response = await api.post(`/agent/actions/${actionId}/start`, null, { params: reason ? { reason } : {} });
+  return response.data;
+};
+
+export const completeAgentAction = async (actionId, reason = null) => {
+  const response = await api.post(`/agent/actions/${actionId}/complete`, null, { params: reason ? { reason } : {} });
+  return response.data;
+};
+
+export const dismissAgentAction = async (actionId, reason = null) => {
+  const response = await api.post(`/agent/actions/${actionId}/dismiss`, null, { params: reason ? { reason } : {} });
+  return response.data;
+};
+
+export const getAgentActionEvents = async (actionId) => {
+  const response = await api.get(`/agent/actions/${actionId}/events`);
+  return response.data;
+};
+
+export const explainAgentAction = async (actionId) => {
+  const response = await api.post(`/agent/explain/${actionId}`);
+  return response.data;
+};
+
+export const getAgentActionExplanation = explainAgentAction;
+
 export default api;

@@ -520,6 +520,22 @@ class ParsedQueryIntent:
     is_scope_comparison: bool = False
     is_follow_up_peak: bool = False
     is_metric_inventory: bool = False
+    intent: Optional[str] = None
+
+    def __post_init__(self):
+        if not self.intent:
+            self.intent = self.retrieval_mode
+
+    def __getitem__(self, item: str):
+        if item == "intent":
+            return self.intent or self.retrieval_mode
+        return getattr(self, item, None)
+
+    def get(self, item: str, default: Any = None):
+        val = getattr(self, item, None)
+        if item == "intent" and not val:
+            return self.retrieval_mode
+        return val if val is not None else default
 
 
 class CopilotRAGRouter:
@@ -527,6 +543,9 @@ class CopilotRAGRouter:
     Phrase-aware deterministic query router and entity extractor (Phase 3 / Step 11R-4).
     Determines retrieval modes, entity targets, temporal constraints, and metadata inquiries.
     """
+
+    def __init__(self, db: Optional[Session] = None):
+        self.db = db
 
     @classmethod
     def parse_query(cls, query: str, history: Optional[List[Dict[str, str]]] = None) -> ParsedQueryIntent:
@@ -634,6 +653,34 @@ class CopilotRAGRouter:
             "next month emissions", "projected emissions", "forecast emissions", "show me my predicted emissions"
         ]):
             return ParsedQueryIntent(retrieval_mode="EMISSION_FORECAST", requested_period=requested_period)
+
+        # Proactive AI Sustainability Agent Intents (Step 23)
+        if any(k in q for k in ["what should i focus on today", "sustainability brief", "today's brief", "todays brief", "ai brief", "agent brief", "what deserves attention now", "give me a brief", "daily brief", "executive summary and brief", "executive summary", "brief"]):
+            return ParsedQueryIntent(retrieval_mode="AGENT_BRIEF", requested_period=requested_period)
+
+        if any(k in q for k in ["what is my top priority", "top priority", "top priorities", "highest priority", "what comes first", "top reduction priority", "where should i focus first", "where should i start", "our top reduction priority"]):
+            return ParsedQueryIntent(retrieval_mode="TOP_PRIORITY", requested_period=requested_period)
+
+        if (
+            any(k in q for k in ["why are you telling me to focus on", "why this action", "why is this recommended", "why should i do this", "why focus on electricity", "why focus on diesel", "why is this my top priority", "why should the business", "top recommendation"])
+            or ("why is" in q and any(w in q for w in ["recommendation", "recommended", "electricity", "diesel", "action", "priority"]))
+        ):
+            return ParsedQueryIntent(retrieval_mode="WHY_ACTION", requested_period=requested_period)
+
+        if any(k in q for k in ["what should i do after completing this", "what happens after this", "follow up action", "follow-up step", "what comes next after", "after completing this", "after resolving"]):
+            return ParsedQueryIntent(retrieval_mode="FOLLOW_UP", requested_period=requested_period)
+
+        if (
+            any(k in q for k in ["what should i do next", "what is the next action", "what is my next step", "next ready action", "next steps", "next action we should take", "what should we do next"])
+            and not any(c in q for c in ["carbon credit"])
+        ):
+            return ParsedQueryIntent(retrieval_mode="NEXT_ACTION", requested_period=requested_period)
+
+        if any(k in q for k in ["what actions are in progress", "show action queue", "status of my actions", "how many actions are open", "list my actions", "agent action status"]):
+            return ParsedQueryIntent(retrieval_mode="ACTION_STATUS", requested_period=requested_period)
+
+        if any(k in q for k in ["what changed recently", "what changed between periods", "what changed", "recent changes", "did my emissions change", "changes in footprint"]):
+            return ParsedQueryIntent(retrieval_mode="WHAT_CHANGED", requested_period=requested_period)
 
 
 

@@ -20,6 +20,7 @@ import EmissionForecastPage from './pages/EmissionForecast';
 import ReductionIntelligence from './pages/ReductionIntelligence';
 import ReductionRoadmap from './pages/ReductionRoadmap';
 import EmissionScenarios from './pages/EmissionScenarios';
+import AgentCenter from './pages/AgentCenter';
 import Metrics from './pages/Metrics';
 
 import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument, getAttentionItems } from './services/api';
@@ -219,6 +220,16 @@ export default function App() {
       return;
     }
 
+    if (pathname === '/agent' || pathname === '/ai-agent') {
+      setActiveTab('ai-agent');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      setComplianceReportId(null);
+      setGreenFinanceAssessmentId(null);
+      setCarbonCreditAssessmentId(null);
+      return;
+    }
+
     if (pathname === '/metrics') {
 
       setActiveTab('metrics');
@@ -361,7 +372,21 @@ export default function App() {
   const handleNavTab = (tab) => {
     setSelectedDocument(null);
     setActiveTab(tab);
-    window.history.pushState(null, '', `/${tab}`);
+    if (tab === 'ai-agent') {
+      window.history.pushState(null, '', '/agent');
+    } else {
+      window.history.pushState(null, '', `/${tab}`);
+    }
+  };
+
+  const handleNavigate = (dest) => {
+    if (!dest) return;
+    if (dest.startsWith('/')) {
+      window.history.pushState(null, '', dest);
+      resolveRoute(dest);
+    } else {
+      handleNavTab(dest);
+    }
   };
 
   return (
@@ -413,7 +438,7 @@ export default function App() {
         ) : activeTab === 'carbon-ledger' ? (
           <CarbonLedger />
         ) : activeTab === 'carbon-dashboard' ? (
-          <CarbonDashboard onNavigate={handleSelectTab} />
+          <CarbonDashboard onNavigate={handleNavigate} />
         ) : activeTab === 'reduction-opportunities' ? (
           <ReductionOpportunities />
         ) : activeTab === 'reduction-projects' ? (
@@ -500,6 +525,10 @@ export default function App() {
           />
         ) : activeTab === 'emission-scenarios' ? (
           <EmissionScenarios />
+        ) : activeTab === 'ai-agent' ? (
+          <AgentCenter
+            onSelectDocument={handleSelectDocument}
+          />
         ) : activeTab === 'metrics' ? (
 
 

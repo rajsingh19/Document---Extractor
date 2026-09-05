@@ -18,6 +18,10 @@ from backend.app.models.emission_scenario import (
     ScenarioInput,
     ScenarioResult,
 )
+from backend.app.models.proactive_agent import (
+    AgentAction,
+    AgentActionEvent,
+)
 
 __all__ = [
     "Document",
@@ -35,6 +39,8 @@ __all__ = [
     "EmissionScenario",
     "ScenarioInput",
     "ScenarioResult",
+    "AgentAction",
+    "AgentActionEvent",
 ]
 
 

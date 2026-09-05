@@ -26,7 +26,9 @@ import {
   Lightbulb,
   Target,
   Compass,
-  ArrowRight
+  ArrowRight,
+  AlertCircle,
+  Clock
 } from 'lucide-react';
 import ExtractionTable from '../components/ExtractionTable';
 import EvidenceSection from '../components/EvidenceSection';
@@ -46,7 +48,12 @@ import {
   getDocumentCarbonReconciliation,
   getReductionOpportunities,
   getDocumentReductionIntelligence,
-  getReductionRoadmaps
+  getReductionRoadmaps,
+  getAgentActions,
+  startAgentAction,
+  completeAgentAction,
+  dismissAgentAction,
+  getAgentActionExplanation
 } from '../services/api';
 
 
@@ -77,6 +84,7 @@ export default function DocumentDetail({
       loadAuditTrail(initialDoc.id);
       loadCarbonSummary(initialDoc.id);
       loadLedgerAndReconciliation(initialDoc.id);
+      loadAgentActions(initialDoc.id);
     }
   }, [initialDoc]);
 
@@ -92,6 +100,57 @@ export default function DocumentDetail({
   const [docOpportunities, setDocOpportunities] = useState([]);
   const [docPriorities, setDocPriorities] = useState([]);
   const [docRoadmaps, setDocRoadmaps] = useState([]);
+  const [docActions, setDocActions] = useState([]);
+  const [loadingActions, setLoadingActions] = useState(false);
+  const [explainingAction, setExplainingAction] = useState(null);
+
+  const loadAgentActions = async (id) => {
+    setLoadingActions(true);
+    try {
+      const res = await getAgentActions({ document_id: id });
+      setDocActions(res.items || []);
+    } catch (err) {
+      console.warn("Failed to load document agent actions:", err);
+    } finally {
+      setLoadingActions(false);
+    }
+  };
+
+  const handleStartAction = async (actionId) => {
+    try {
+      await startAgentAction(actionId);
+      if (doc?.id) await loadAgentActions(doc.id);
+    } catch (err) {
+      alert("Failed to start action: " + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleCompleteAction = async (actionId) => {
+    try {
+      await completeAgentAction(actionId, { note: "Completed from document detail" });
+      if (doc?.id) await loadAgentActions(doc.id);
+    } catch (err) {
+      alert("Failed to complete action: " + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleDismissAction = async (actionId) => {
+    try {
+      await dismissAgentAction(actionId, { reason: "Dismissed from document detail" });
+      if (doc?.id) await loadAgentActions(doc.id);
+    } catch (err) {
+      alert("Failed to dismiss action: " + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleExplainAction = async (actionId) => {
+    try {
+      const explanation = await getAgentActionExplanation(actionId);
+      setExplainingAction(explanation);
+    } catch (err) {
+      alert("Failed to fetch explanation: " + (err.response?.data?.detail || err.message));
+    }
+  };
 
   const loadLedgerAndReconciliation = async (id) => {
     try {
@@ -284,6 +343,7 @@ export default function DocumentDetail({
 
   const sidebarNavItems = [
     { id: 'overview', label: 'Overview', icon: FileText },
+    { id: 'agent_actions', label: `AI Agent Actions${docActions.length ? ` (${docActions.length})` : ''}`, icon: Sparkles },
     { id: 'evidence_report', label: 'Evidence Report', icon: FileText },
     { id: 'energy', label: 'Energy & Emissions', icon: Zap },
     { id: 'water', label: 'Water & Waste', icon: Droplet },
@@ -405,6 +465,140 @@ export default function DocumentDetail({
             onBack={() => setActiveSection('overview')}
             onNavigateToDocument={() => setActiveSection('overview')}
           />
+        ) : activeSection === 'agent_actions' ? (
+          <div className="space-y-5">
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-[#0F6B56]" />
+                  <h2 className="text-lg font-bold text-slate-900">AI Agent Actions for Document #{doc.id}</h2>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                    {docActions.length} Actions
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Grounded recommendations generated specifically from this document's verified records.
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveSection('overview')}
+                className="text-xs text-[#0F6B56] font-semibold hover:underline self-start sm:self-auto"
+              >
+                &larr; Back to Overview Dashboard
+              </button>
+            </div>
+
+            {loadingActions ? (
+              <div className="p-8 text-center text-slate-500 bg-white rounded-xl border border-slate-200">
+                <Sparkles className="w-6 h-6 mx-auto mb-2 text-emerald-600 animate-spin" />
+                <p className="text-xs">Loading grounded actions...</p>
+              </div>
+            ) : docActions.length === 0 ? (
+              <div className="p-10 text-center bg-white rounded-xl border border-slate-200 space-y-3">
+                <Sparkles className="w-8 h-8 mx-auto text-slate-300" />
+                <h3 className="text-sm font-bold text-slate-800">No Document Actions Found</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  There are no active AI Agent recommendations for this document. Ensure carbon calculations and ledger postings have been completed, or run the proactive agent from the AI Agent Center.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {docActions.map((action) => (
+                  <div
+                    key={action.id}
+                    className={`bg-white rounded-xl border p-5 shadow-sm transition-all ${
+                      action.status === 'COMPLETED'
+                        ? 'border-emerald-200 bg-emerald-50/20 opacity-80'
+                        : action.status === 'DISMISSED'
+                        ? 'border-slate-200 opacity-60'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div className="space-y-1 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                            action.priority_level === 'CRITICAL' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                            action.priority_level === 'HIGH' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                            action.priority_level === 'MEDIUM' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                            'bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}>
+                            {action.priority_level}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                            action.action_queue === 'REDUCTION' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {action.action_queue === 'REDUCTION' ? 'Reduction Action' : 'Data Quality Blocker'}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                            action.dependency_status === 'READY' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                            action.dependency_status === 'BLOCKED' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                            'bg-slate-100 text-slate-700'
+                          }`}>
+                            {action.dependency_status}
+                          </span>
+                          <span className="text-[11px] font-medium text-slate-400">
+                            Source: {action.priority_source}
+                          </span>
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-900 pt-1">{action.title}</h3>
+                        <p className="text-xs text-slate-600">{action.description}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0 self-start sm:self-center">
+                        <button
+                          onClick={() => handleExplainAction(action.id)}
+                          className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
+                        >
+                          Explain
+                        </button>
+                        {action.status === 'OPEN' && (
+                          <button
+                            onClick={() => handleStartAction(action.id)}
+                            className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 transition-colors"
+                          >
+                            Start
+                          </button>
+                        )}
+                        {(action.status === 'OPEN' || action.status === 'IN_PROGRESS') && (
+                          <button
+                            onClick={() => handleCompleteAction(action.id)}
+                            className="px-2.5 py-1.5 text-xs font-semibold text-white bg-[#0F6B56] hover:bg-[#0c5645] rounded-lg shadow-sm transition-colors"
+                          >
+                            Complete
+                          </button>
+                        )}
+                        {action.status !== 'COMPLETED' && action.status !== 'DISMISSED' && (
+                          <button
+                            onClick={() => handleDismissAction(action.id)}
+                            className="px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                          >
+                            Dismiss
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Structured Explanation Preview */}
+                    <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                      <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                        <span className="font-bold text-slate-700 block text-[10px] uppercase tracking-wider mb-0.5">What:</span>
+                        <span className="text-slate-600 line-clamp-2">{action.what}</span>
+                      </div>
+                      <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                        <span className="font-bold text-slate-700 block text-[10px] uppercase tracking-wider mb-0.5">Why:</span>
+                        <span className="text-slate-600 line-clamp-2">{action.why}</span>
+                      </div>
+                      <div className="bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-100">
+                        <span className="font-bold text-[#0F6B56] block text-[10px] uppercase tracking-wider mb-0.5">Next Step:</span>
+                        <span className="text-slate-700 line-clamp-2">{action.next}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         ) : activeSection !== 'overview' ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between bg-white p-4 border border-[#E5E7EB] rounded-xl shadow-2xs">
@@ -532,6 +726,35 @@ export default function DocumentDetail({
                   <li>Evidence backed: 9 of 11 extracted metrics mapped to verbatim document text</li>
                   <li>9 fields scored High Confidence (&gt;90%)</li>
                 </ul>
+              </div>
+            )}
+
+            {/* AI Agent Action Summary Banner */}
+            {docActions.length > 0 && (
+              <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-white border border-emerald-200 rounded-xl p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-[#0F6B56] text-white rounded-lg">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                      Proactive AI Agent
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                        {docActions.length} Actions Found
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-600">
+                      {docActions.filter(a => a.dependency_status === 'READY').length} actions are ready for execution on this document.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveSection('agent_actions')}
+                  className="px-3 py-1.5 bg-[#0F6B56] hover:bg-[#0c5645] text-white text-xs font-semibold rounded-lg transition-colors flex items-center space-x-1.5 self-start sm:self-auto"
+                >
+                  <span>View All Actions ({docActions.length})</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
 
@@ -1324,6 +1547,76 @@ export default function DocumentDetail({
             <div className="pt-3 border-t border-slate-100 flex justify-end">
               <button
                 onClick={() => setShowEvidenceModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Explanation Modal */}
+      {explainingAction && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-[#0F6B56]" />
+                <h3 className="text-base font-bold text-slate-900">
+                  Action Explanation & Grounding
+                </h3>
+              </div>
+              <button
+                onClick={() => setExplainingAction(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <span className="font-bold text-slate-900 text-sm block">{explainingAction.title}</span>
+                <span className="text-slate-500">{explainingAction.action_type} • Source: {explainingAction.priority_source}</span>
+              </div>
+
+              <div className="space-y-3">
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px] block mb-1">WHAT</span>
+                  <p className="text-slate-700 leading-relaxed">{explainingAction.what}</p>
+                </div>
+
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px] block mb-1">WHY</span>
+                  <p className="text-slate-700 leading-relaxed">{explainingAction.why}</p>
+                </div>
+
+                <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
+                  <span className="font-bold text-[#0F6B56] uppercase tracking-wider text-[11px] block mb-1">NEXT STEP</span>
+                  <p className="text-slate-800 leading-relaxed">{explainingAction.next}</p>
+                </div>
+
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px] block mb-1">EVIDENCE AUDIT TRAIL</span>
+                  <p className="text-slate-700 font-mono text-[11px] leading-relaxed">{explainingAction.evidence}</p>
+                </div>
+
+                <div className="bg-blue-50 p-3 rounded-xl border border-blue-200">
+                  <span className="font-bold text-blue-900 uppercase tracking-wider text-[11px] block mb-1">FOLLOW-UP</span>
+                  <p className="text-slate-700 leading-relaxed">{explainingAction.follow_up}</p>
+                </div>
+
+                <div className="bg-amber-50 p-3 rounded-xl border border-amber-200">
+                  <span className="font-bold text-amber-900 uppercase tracking-wider text-[11px] block mb-1">LIMITATION & SAFETY</span>
+                  <p className="text-amber-900 leading-relaxed">{explainingAction.limitation}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setExplainingAction(null)}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
               >
                 Close

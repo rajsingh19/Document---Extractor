@@ -45,6 +45,7 @@ def init_db():
     from backend.app.models.verification_record import VerificationRecord  # noqa: F401
     from backend.app.models.compliance_report import ComplianceReport, ComplianceReportSection, ComplianceDisclosure, ComplianceReportEvent  # noqa: F401
     from backend.app.models.green_finance import GreenFinanceAssessment, GreenFinanceRequirement, GreenFinanceEvidence, GreenFinanceAssessmentEvent  # noqa: F401
+    from backend.app.models.proactive_agent import AgentAction, AgentActionEvent  # noqa: F401
     Base.metadata.create_all(bind=engine)
     
     # Auto-migration for SQLite columns added in Step 3
