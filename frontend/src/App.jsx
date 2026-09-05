@@ -19,6 +19,7 @@ import CarbonCreditDetail from './pages/CarbonCreditDetail';
 import EmissionForecastPage from './pages/EmissionForecast';
 import ReductionIntelligence from './pages/ReductionIntelligence';
 import ReductionRoadmap from './pages/ReductionRoadmap';
+import EmissionScenarios from './pages/EmissionScenarios';
 import Metrics from './pages/Metrics';
 
 import { getDocuments, getStats, getHealth, getDocument, seedSampleDocument, deleteDocument, processDocument, getAttentionItems } from './services/api';
@@ -200,6 +201,16 @@ export default function App() {
 
     if (pathname === '/reduction-roadmap') {
       setActiveTab('reduction-roadmap');
+      setSelectedDocument(null);
+      setReportDocId(null);
+      setComplianceReportId(null);
+      setGreenFinanceAssessmentId(null);
+      setCarbonCreditAssessmentId(null);
+      return;
+    }
+
+    if (pathname === '/emission-scenarios') {
+      setActiveTab('emission-scenarios');
       setSelectedDocument(null);
       setReportDocId(null);
       setComplianceReportId(null);
@@ -487,6 +498,8 @@ export default function App() {
           <ReductionRoadmap
             onSelectDocument={handleSelectDocument}
           />
+        ) : activeTab === 'emission-scenarios' ? (
+          <EmissionScenarios />
         ) : activeTab === 'metrics' ? (
 
 

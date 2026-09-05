@@ -61,6 +61,19 @@ def classify_intent(query: str, history: Optional[List[Dict[str, str]]] = None) 
     if any(k in q for k in ["carbon credit", "carbon credits", "ready for carbon credits", "carbon credit readiness", "tradable credits"]):
         return "CARBON_CREDIT_READINESS"
 
+    # Step 22C: EMISSION_SCENARIO_ANALYSIS (What-if scenario modeling)
+    if any(k in q for k in [
+        "what if i replace", "what if we replace", "what if i reduce", "what if we reduce",
+        "what if i switch", "what if we switch", "what if diesel", "what if electricity",
+        "what if grid", "what if solar", "what if consumption", "what if fuel",
+        "scenario analysis", "emission scenario", "emissions scenario", "what-if", "what if",
+        "how would this scenario affect", "how does this scenario affect",
+        "model a scenario", "scenario calculation", "what assumptions did you use",
+        "how much will solar save", "how much co2 will solar save", "how much co2 would solar save",
+        "can i replace grid electricity with solar", "switch to solar"
+    ]):
+        return "EMISSION_SCENARIO_ANALYSIS"
+
     # 1. DOCUMENT_REVIEW: Items needing attention or verification
     if any(k in q for k in [
         "need review", "needs review", "attention", "pending review", 

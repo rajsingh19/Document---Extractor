@@ -13,6 +13,11 @@ from backend.app.models.reduction_roadmap import (
     ReductionRoadmapItem,
     ReductionRoadmapEvent,
 )
+from backend.app.models.emission_scenario import (
+    EmissionScenario,
+    ScenarioInput,
+    ScenarioResult,
+)
 
 __all__ = [
     "Document",
@@ -27,6 +32,9 @@ __all__ = [
     "ReductionRoadmap",
     "ReductionRoadmapItem",
     "ReductionRoadmapEvent",
+    "EmissionScenario",
+    "ScenarioInput",
+    "ScenarioResult",
 ]
 
 

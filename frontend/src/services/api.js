@@ -717,10 +717,46 @@ export const getReductionRoadmapEvents = async (roadmapId) => {
   return response.data;
 };
 
+// --- Emission Scenarios & What-If Analysis API Methods (Step 22C) ---
+
+export const getEmissionScenarios = async (params = {}) => {
+  const response = await api.get('/emission-scenarios', { params });
+  return response.data;
+};
+
+export const getDocumentEmissionScenarios = async (documentId, params = {}) => {
+  const response = await api.get(`/emission-scenarios/document/${documentId}`, { params });
+  return response.data;
+};
+
+export const getEmissionScenario = async (scenarioId) => {
+  const response = await api.get(`/emission-scenarios/${scenarioId}`);
+  return response.data;
+};
+
+export const createEmissionScenario = async (data) => {
+  const response = await api.post('/emission-scenarios', data);
+  return response.data;
+};
+
+export const recalculateEmissionScenario = async (scenarioId) => {
+  const response = await api.post(`/emission-scenarios/${scenarioId}/calculate`);
+  return response.data;
+};
+
+export const getScenarioResults = async (scenarioId) => {
+  const response = await api.get(`/emission-scenarios/${scenarioId}/results`);
+  return response.data;
+};
+
+export const updateEmissionScenario = async (scenarioId, data) => {
+  const response = await api.patch(`/emission-scenarios/${scenarioId}`, data);
+  return response.data;
+};
+
+export const archiveEmissionScenario = async (scenarioId) => {
+  const response = await api.delete(`/emission-scenarios/${scenarioId}`);
+  return response.data;
+};
+
 export default api;
-
-
-
-
-
-
