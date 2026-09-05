@@ -23,7 +23,8 @@ import {
   Check,
   Archive,
   BarChart3,
-  Lightbulb
+  Lightbulb,
+  Target
 } from 'lucide-react';
 import ExtractionTable from '../components/ExtractionTable';
 import EvidenceSection from '../components/EvidenceSection';
@@ -41,8 +42,10 @@ import {
   getDocumentCarbonLedger,
   postDocumentCarbonLedger,
   getDocumentCarbonReconciliation,
-  getReductionOpportunities
+  getReductionOpportunities,
+  getDocumentReductionIntelligence
 } from '../services/api';
+
 
 export default function DocumentDetail({
   document: initialDoc,
@@ -84,21 +87,25 @@ export default function DocumentDetail({
   };
 
   const [docOpportunities, setDocOpportunities] = useState([]);
+  const [docPriorities, setDocPriorities] = useState([]);
 
   const loadLedgerAndReconciliation = async (id) => {
     try {
-      const [ledData, reconData, oppsData] = await Promise.all([
+      const [ledData, reconData, oppsData, prioritiesData] = await Promise.all([
         getDocumentCarbonLedger(id).catch(() => null),
         getDocumentCarbonReconciliation(id).catch(() => null),
         getReductionOpportunities({ document_id: id }).catch(() => null),
+        getDocumentReductionIntelligence(id).catch(() => null),
       ]);
       if (ledData) setLedgerSummary(ledData);
       if (reconData) setReconciliation(reconData);
       if (oppsData) setDocOpportunities(oppsData.items || []);
+      if (prioritiesData) setDocPriorities(prioritiesData.items || []);
     } catch (err) {
-      console.error('Failed to load ledger / reconciliation / opportunities:', err);
+      console.error('Failed to load ledger / reconciliation / opportunities / priorities:', err);
     }
   };
+
 
   const handleRunCarbonCalculation = async () => {
     if (!doc?.id) return;
@@ -1010,9 +1017,64 @@ export default function DocumentDetail({
               </div>
             </div>
 
+            {/* 5E. REDUCTION FOCUS (Top 1-3 Priorities for Document) */}
+            {docPriorities && docPriorities.length > 0 && (
+              <div className="bg-white border border-[#E5E7EB] rounded-xl p-5 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center space-x-2">
+                    <span className="p-1 rounded-md bg-[#EAF7F2] text-[#0F6B56]">
+                      <Target className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                        Reduction Focus (Top Priorities)
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        Deterministic decision support: Ranked focus areas for carbon footprint reduction.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {docPriorities.slice(0, 3).map((p, idx) => (
+                    <div key={p.id || p.priority_code} className="p-3 bg-slate-50 rounded-lg border border-slate-200/80 flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-900 text-white">
+                            #{idx + 1}
+                          </span>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                            p.priority_level === 'CRITICAL' ? 'bg-red-50 text-red-700 border-red-200' :
+                            p.priority_level === 'HIGH' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                            p.priority_level === 'MEDIUM' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            'bg-slate-100 text-slate-700 border-slate-200'
+                          }`}>
+                            {p.priority_level}
+                          </span>
+                          <span className="text-xs font-semibold text-slate-900">{p.title}</span>
+                        </div>
+                        <p className="text-xs text-slate-600 line-clamp-1">{p.reason}</p>
+                      </div>
+
+                      <div className="text-right flex-shrink-0">
+                        <span className="text-xs font-bold text-[#0F6B56] block">
+                          Score: {Math.round(p.priority_score)}/100
+                        </span>
+                        <span className="text-[10px] text-slate-500 block">
+                          {p.current_emissions_tco2e ? `${p.current_emissions_tco2e.toFixed(4)} tCO2e` : '0.0000 tCO2e'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 5F. REDUCTION OPPORTUNITIES (Linked to Document) */}
             {docOpportunities && docOpportunities.length > 0 && (
               <div className="bg-white border border-[#E5E7EB] rounded-xl p-5 shadow-2xs space-y-3">
+
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div className="flex items-center space-x-2">
                     <span className="p-1 rounded-md bg-emerald-100 text-emerald-800">

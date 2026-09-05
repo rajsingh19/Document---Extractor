@@ -18,6 +18,14 @@ from backend.app.schemas.extraction import (
     QualitySummary,
     ExtractionMetadata
 )
+from backend.app.schemas.emission_forecast import (
+    ForecastRequest,
+    DataQualityReport,
+    ForecastBacktestResult,
+    EmissionForecastPoint,
+    EmissionForecastResponse,
+    ForecastModelMetadata,
+)
 
 __all__ = [
     "DocumentBase",
@@ -35,5 +43,12 @@ __all__ = [
     "LineItem",
     "FieldEvidence",
     "QualitySummary",
-    "ExtractionMetadata"
+    "ExtractionMetadata",
+    "ForecastRequest",
+    "DataQualityReport",
+    "ForecastBacktestResult",
+    "EmissionForecastPoint",
+    "EmissionForecastResponse",
+    "ForecastModelMetadata",
 ]
+

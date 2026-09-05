@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { FileText, BarChart3, Activity, X, ShieldCheck, Database, Cpu, Sparkles, Layers, Calculator, BookOpen, Lightbulb, FolderKanban, Award, TrendingUp } from 'lucide-react';
+import { FileText, BarChart3, Activity, X, ShieldCheck, Database, Cpu, Sparkles, Layers, Calculator, BookOpen, Lightbulb, FolderKanban, Award, TrendingUp, Target } from 'lucide-react';
+
 
 export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, isSeeding }) {
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -97,6 +98,18 @@ export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, i
               </button>
 
               <button
+                onClick={() => onSelectTab('reduction-intelligence')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'reduction-intelligence'
+                    ? 'bg-[#EAF7F2] text-[#0F6B56]'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Target className="w-3.5 h-3.5" />
+                <span>Reduction Intelligence</span>
+              </button>
+
+              <button
                 onClick={() => onSelectTab('reduction-opportunities')}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 ${
                   activeTab === 'reduction-opportunities'
@@ -107,6 +120,7 @@ export default function Navbar({ activeTab, onSelectTab, health, onSeedSample, i
                 <Lightbulb className="w-3.5 h-3.5" />
                 <span>Opportunities</span>
               </button>
+
 
               <button
                 onClick={() => onSelectTab('reduction-projects')}

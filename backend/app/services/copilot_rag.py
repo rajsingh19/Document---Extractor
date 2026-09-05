@@ -586,6 +586,57 @@ class CopilotRAGRouter:
         if any(k in q for k in ["will i get approved", "loan approval", "loan eligible", "guaranteed loan", "what interest rate", "what loan amount", "credit score", "creditworthiness"]):
             return ParsedQueryIntent(retrieval_mode="GREEN_FINANCE_READINESS", is_speculative=True, requested_period=requested_period)
 
+        # Carbon Credit Readiness & Refusal Routing (Step 20)
+        if any(k in q for k in [
+            "how many carbon credits", "how many credits will i get", "how many credits do i get",
+            "calculate credits", "credit quantity", "estimate credits", "can i sell these credits",
+            "sell carbon credits", "sell credits", "trade credits", "what will my credits be worth",
+            "carbon credit price", "carbon credit market value", "value of credits", "how much will i make from credits",
+            "are my reductions definitely additional", "is my project additional", "is this project additional",
+            "guarantee additionality"
+        ]):
+            return ParsedQueryIntent(retrieval_mode="CARBON_CREDIT_READINESS", is_speculative=True, requested_period=requested_period)
+
+        if any(k in q for k in ["why is my carbon credit readiness score", "why is my score", "explain readiness score", "explain carbon credit score"]):
+            return ParsedQueryIntent(retrieval_mode="CARBON_CREDIT_EXPLAIN_SCORE", requested_period=requested_period)
+
+        if any(k in q for k in ["what is missing before certification", "what is missing before methodology", "what evidence do i still need", "missing for carbon credits"]):
+            return ParsedQueryIntent(retrieval_mode="CARBON_CREDIT_MISSING", requested_period=requested_period)
+
+        if any(k in q for k in ["what should i do next", "next action for carbon credits", "carbon credit next steps"]) and any(c in hist_text + " " + q for c in ["carbon credit", "readiness", "project", "certification"]):
+            return ParsedQueryIntent(retrieval_mode="CARBON_CREDIT_NEXT_ACTION", requested_period=requested_period)
+
+        if any(k in q for k in ["is this project verified", "is project verified", "verification status for carbon", "externally verified"]):
+            return ParsedQueryIntent(retrieval_mode="CARBON_CREDIT_VERIFICATION", requested_period=requested_period)
+
+        if any(k in q for k in ["methodology readiness", "verra eligible", "gold standard eligible", "verra", "gold standard", "generic carbon standard", "methodology review"]):
+            return ParsedQueryIntent(retrieval_mode="CARBON_CREDIT_METHODOLOGY", requested_period=requested_period)
+
+        if any(k in q for k in ["carbon credit", "carbon credits", "ready for carbon credits", "carbon credit readiness", "has this project generated carbon credits"]):
+            return ParsedQueryIntent(retrieval_mode="CARBON_CREDIT_READINESS", requested_period=requested_period)
+
+        # Predictive Emissions Analytics Intent Routing (Step 21)
+        if any(k in q for k in ["how reliable is this prediction", "forecast confidence", "how reliable is the forecast", "confidence in forecast", "reliability of forecast"]):
+            return ParsedQueryIntent(retrieval_mode="EMISSION_FORECAST_CONFIDENCE", requested_period=requested_period)
+
+        if any(k in q for k in ["what does the forecast mean", "why is next month's emission projected", "why will scope 2 increase", "why will emissions increase", "explain the forecast", "explain forecast"]):
+            return ParsedQueryIntent(retrieval_mode="EMISSION_FORECAST_EXPLAIN", requested_period=requested_period)
+
+        if any(k in q for k in ["will my emissions increase", "emissions trend", "future emission trend", "forecast trend"]):
+            return ParsedQueryIntent(retrieval_mode="EMISSION_FORECAST_TREND", requested_period=requested_period)
+
+        if any(k in q for k in ["forecast limitation", "forecast data limitation", "why is forecast unavailable"]):
+            return ParsedQueryIntent(retrieval_mode="EMISSION_FORECAST_LIMITATION", requested_period=requested_period)
+
+        if any(k in q for k in [
+            "what will my scope 2 emissions be next month", "what will my emissions be",
+            "predictive emissions", "predicted emissions", "emission forecast", "future emissions",
+            "next month emissions", "projected emissions", "forecast emissions", "show me my predicted emissions"
+        ]):
+            return ParsedQueryIntent(retrieval_mode="EMISSION_FORECAST", requested_period=requested_period)
+
+
+
         # 6. Metric Inventory
         if any(k in q for k in ["what sustainability metrics can you extract", "what sustainability metrics are present", "which sustainability metrics do we currently have", "what metrics are in this document", "sustainability metrics present"]):
             return ParsedQueryIntent(retrieval_mode="METRIC_INVENTORY", is_metric_inventory=True, requested_period=requested_period)

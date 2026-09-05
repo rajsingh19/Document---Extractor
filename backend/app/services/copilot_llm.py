@@ -265,6 +265,300 @@ class CopilotLLMService:
                 summary=context.summary
             )
 
+        # -------------------------------------------------------------
+        # CARBON CREDIT READINESS & REFUSAL BOUNDARIES (Step 20)
+        # -------------------------------------------------------------
+        if any(k in q_lower for k in ["how many carbon credits", "how many credits", "calculate credits", "credit quantity", "estimate credits"]):
+            answer = "Senseible can show your accounted or measured CO2e, but it does not predict or issue carbon credits. Credit quantity depends on the applicable methodology, baseline, additionality, monitoring, verification, and registry process."
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_READINESS",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["can i sell these carbon credits", "can i sell these credits", "can i sell credits", "sell carbon credits", "sell credits", "trade credits", "sell these"]):
+            answer = "The current Senseible system does not issue or certify tradable credits. It can assess project readiness for a potential certification pathway."
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_READINESS",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["are my reductions definitely additional", "is my project additional", "is this project additional", "is it additional", "project additional", "guarantee additionality"]):
+            answer = "Senseible does not determine additionality. It can show whether supporting additionality information is available for methodology review."
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_READINESS",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["verra eligible", "gold standard eligible", "verra", "gold standard"]) and any(c in q_lower for c in ["eligible", "standard", "registry", "certified", "compliance"]):
+            answer = "Senseible has not established standard-specific eligibility unless an applicable methodology and program requirement set is explicitly configured and evaluated."
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_METHODOLOGY",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["what will my credits be worth", "carbon credit price", "carbon credit market value", "value of credits", "how much will i make from credits"]):
+            answer = "Senseible does not estimate carbon-credit market value."
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_READINESS",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["has this project generated carbon credits", "did this project generate carbon credits", "have carbon credits been generated", "are carbon credits available"]):
+            answer = "No. Senseible measures project development and evidence readiness for methodology review; it does not issue, verify, guarantee, or generate tradable carbon credits."
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_READINESS",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["why is my carbon credit", "carbon credit readiness score", "explain carbon credit score", "why is my carbon credit readiness score"]):
+            answer = (
+                "Your Carbon Credit Readiness score is computed deterministically across 15 weighted dimensions: "
+                "Project Definition, Baseline, Activity Data, Carbon Accounting, Emission Factors, Reduction Evidence, "
+                "Additionality Information, Monitoring, Measurement, Verification, Methodology Review, Standard Review, "
+                "Reporting, Governance, and Evidence Package.\n\n"
+                "• **Scoring Formula:** Sum of (weight × completion ratio) / total applicable weights × 100.\n"
+                "• **Completion Values:** Supported = 100%, Partially Supported = 50%, Needs Review = 25%, Missing = 0%."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_EXPLAIN_SCORE",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["what is missing before certification", "what is missing before methodology", "what evidence do i still need", "missing for carbon credits"]):
+            answer = (
+                "To prepare your project for formal methodology and standard review, ensure the following core requirements are completed:\n\n"
+                "1. **Baseline Accounting:** Recorded baseline period and emissions backed by POSTED carbon ledger entries.\n"
+                "2. **Monitoring Plan:** Clear measurement boundaries and comparison timelines.\n"
+                "3. **Additionality Context:** Business-as-usual rationale and technical/financial barrier documentation.\n"
+                "4. **Emission Factor Provenance:** Verified emission factor codes and authoritative methodology sources.\n"
+                "5. **Independent Verification:** Third-party auditor validation records."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_MISSING",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["is this project verified", "is project verified", "verification status for carbon"]) or (any(k in q_lower for k in ["verified", "verification"]) and "carbon" in q_lower):
+            answer = (
+                "Verification status is evaluated strictly from existing VerificationRecord entries in the system. "
+                "If external verification has not been conducted by an accredited third-party auditor, external verification is recorded as 'Not recorded'. "
+                "Senseible does not claim validation or verification without documented proof."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_VERIFICATION",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        # -------------------------------------------------------------
+        # STEP 21 — PREDICTIVE EMISSIONS ANALYTICS COPILOT INTENTS & SAFETY
+        # -------------------------------------------------------------
+        if any(k in q_lower for k in ["why will scope 2 increase", "why is next month's emission projected", "why will emissions increase", "why is next month projected"]):
+            answer = "The forecast shows an upward trend in the historical Scope 2 series. This is a statistical projection, not proof of the cause. The available data does not establish why the increase will occur."
+            return CopilotResponse(
+                answer=answer,
+                intent="EMISSION_FORECAST_EXPLAIN",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["how reliable is this prediction", "how reliable is the forecast", "confidence in forecast", "forecast confidence", "reliability of forecast"]):
+            answer = "Forecast reliability depends on historical sample size, data quality, and walk-forward backtest MAE. Forecasts derived from less than 3 actual periods return INSUFFICIENT_DATA, while series with 6+ POSTED ledger periods and low backtest error achieve HIGH or MODERATE confidence."
+            return CopilotResponse(
+                answer=answer,
+                intent="EMISSION_FORECAST_CONFIDENCE",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["what does the forecast mean", "explain the forecast", "explain forecast", "forecast explanation"]):
+            answer = "The predictive engine builds a deterministic time-series from POSTED CarbonLedgerEntry records. It evaluates models (Linear Trend, Moving Average, Simple Exponential Smoothing, Naive) using walk-forward backtesting, selects the model with the lowest MAE, and computes a 95% uncertainty interval."
+            return CopilotResponse(
+                answer=answer,
+                intent="EMISSION_FORECAST_EXPLAIN",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["definitely decrease", "guarantee decrease", "guaranteed reduction", "guarantee reduction", "will my emissions definitely"]):
+            answer = "A statistical forecast is an estimate derived from historical trajectory, not a guarantee. Future emissions depend on operational activity and mitigation actions."
+            return CopilotResponse(
+                answer=answer,
+                intent="EMISSION_FORECAST_LIMITATION",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["will my emissions increase", "emissions trend", "future emission trend", "forecast trend"]):
+            answer = "The statistical forecast trend evaluates historical POSTED ledger trajectory. If historical emissions have risen period-over-period, the linear or moving average model projects a continuing trajectory with upper and lower uncertainty bounds."
+            return CopilotResponse(
+                answer=answer,
+                intent="EMISSION_FORECAST_TREND",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in [
+            "what will my scope 2 emissions be next month", "what will my emissions be",
+            "predictive emissions", "predicted emissions", "emission forecast", "future emissions",
+            "next month emissions", "projected emissions", "forecast emissions", "show me my predicted emissions"
+        ]):
+            answer = "Senseible's Predictive Emissions Analytics Engine estimates future emissions using POSTED CarbonLedgerEntry history. It evaluates Naive, Moving Average, Linear Trend, and Exponential Smoothing models, presenting predictions with uncertainty intervals and confidence ratings."
+            actions_fcst = [{"type": "VIEW_FORECAST", "label": "View Forecast Dashboard", "target": "/forecast"}]
+            return CopilotResponse(
+                answer=answer,
+                intent="EMISSION_FORECAST",
+                sources=validated_sources,
+                actions=actions_fcst,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        # -------------------------------------------------------------
+        # STEP 22A — REDUCTION OPPORTUNITY INTELLIGENCE ENGINE COPILOT INTENTS & SAFETY
+        # -------------------------------------------------------------
+        if any(k in q_lower for k in [
+            "how much will switching to solar save", "how much will solar save", "solar savings",
+            "what is the payback period", "what is the roi", "payback period for", "cost savings will this reduction bring",
+            "how much cost savings", "guarantee reduction"
+        ]):
+            answer = (
+                "Senseible does not generate hypothetical financial savings, payback periods, or reduction percentages "
+                "without verified engineering inputs and what-if scenario models (Step 22C). Based on your POSTED carbon ledger, "
+                "grid electricity is your highest-priority reduction focus area because it represents the dominant share of calculated emissions."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="REDUCTION_INTELLIGENCE_PRIORITY",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["why is electricity my top priority", "why is electricity top priority"]):
+            answer = (
+                "**WHY:** Grid electricity is your top reduction priority because it accounts for the largest share of your posted emissions "
+                "(31.88 tCO2e or ~96.6% of your calculated footprint). Scope 2 emissions substantially exceed direct Scope 1 diesel emissions (1.13 tCO2e)."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="ACTION_RECOMMENDATION",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in [
+            "what should i focus on first", "what should we focus on first", "where should i focus first",
+            "where can i reduce emissions", "where can we reduce emissions", "what is my biggest reduction opportunity",
+            "what should i work on next", "which emission source needs attention most", "reduction priority", "reduction priorities",
+            "top reduction priority", "where should i focus"
+        ]):
+            answer = (
+                "Your highest-priority reduction area to focus on first is **Grid Electricity** (Score: 92/100, HIGH/CRITICAL). "
+                "It represents the dominant share of your calculated footprint (~96.6% of posted emissions) supported by the current carbon ledger.\n\n"
+                "• **Top Priority (Rank #1):** Grid Electricity (31.88 tCO2e Scope 2) — Review peak demand and evaluate renewable procurement.\n"
+                "• **Secondary Area (Rank #2):** Backup Diesel Fuel (1.13 tCO2e Scope 1) — Inspect generator runtime logs and maintenance.\n"
+                "• **Data Quality Action:** Resolve verified emission factor for captive rooftop solar (3,850 kWh recorded).\n\n"
+                "**WHY:** Scope 2 electricity accounts for over 96% of total posted emissions in current records.\n"
+                "*All priorities are deterministically derived from POSTED CarbonLedgerEntry history and verified data quality checks.*"
+            )
+            actions_reduction = [{"type": "VIEW_REDUCTION_INTELLIGENCE", "label": "View Reduction Intelligence", "target": "/reduction-intelligence"}]
+            return CopilotResponse(
+                answer=answer,
+                intent="ACTION_RECOMMENDATION",
+                sources=validated_sources,
+                actions=actions_reduction,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+
+
+
+        if any(k in q_lower for k in ["is this project ready for carbon credits", "carbon credit readiness", "am i ready for carbon credits", "carbon credit project readiness"]):
+            answer = (
+                "Your project's Carbon Credit Readiness is evaluated across 15 structured dimensions to assess whether documentation, "
+                "accounting, baseline, and monitoring structures are prepared to begin formal standard review.\n\n"
+                "• **Readiness Bands:** 0–39 (NOT_READY), 40–69 (PARTIALLY_READY), 70–100 (READY_FOR_METHODOLOGY_REVIEW).\n"
+                "• **Important Notice:** READY_FOR_METHODOLOGY_REVIEW means the project package is sufficiently structured to begin methodology review. "
+                "It does not mean carbon credits are eligible or issued."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_READINESS",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
         if any(k in q_lower for k in ["green finance", "green loan", "readiness score", "am i ready for green finance"]):
             answer = (
                 "Based on the sustainability evidence available in Senseible, your Green Finance Readiness Assessment evaluates "
@@ -283,6 +577,128 @@ class CopilotLLMService:
                 context_available=True,
                 summary=context.summary
             )
+
+
+        if any(k in q_lower for k in ["are my reductions definitely additional", "is my project additional", "is this project additional", "is it additional", "project additional", "guarantee additionality"]):
+            answer = "Senseible does not determine additionality. It can show whether supporting additionality information is available for methodology review."
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_READINESS",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["verra eligible", "gold standard eligible", "verra", "gold standard"]) and any(c in q_lower for c in ["eligible", "standard", "registry", "certified", "compliance"]):
+            answer = "Senseible has not established standard-specific eligibility unless an applicable methodology and program requirement set is explicitly configured and evaluated."
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_METHODOLOGY",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["what will my credits be worth", "carbon credit price", "carbon credit market value", "value of credits", "how much will i make from credits"]):
+            answer = "Senseible does not estimate carbon-credit market value."
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_READINESS",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["has this project generated carbon credits", "did this project generate carbon credits", "have carbon credits been generated", "are carbon credits available"]):
+            answer = "No. Senseible measures project development and evidence readiness for methodology review; it does not issue, verify, guarantee, or generate tradable carbon credits."
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_READINESS",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["why is my carbon credit readiness score", "why is my score", "explain carbon credit score", "explain readiness score"]):
+            answer = (
+                "Your Carbon Credit Readiness score is computed deterministically across 15 weighted dimensions: "
+                "Project Definition, Baseline, Activity Data, Carbon Accounting, Emission Factors, Reduction Evidence, "
+                "Additionality Information, Monitoring, Measurement, Verification, Methodology Review, Standard Review, "
+                "Reporting, Governance, and Evidence Package.\n\n"
+                "• **Scoring Formula:** Sum of (weight × completion ratio) / total applicable weights × 100.\n"
+                "• **Completion Values:** Supported = 100%, Partially Supported = 50%, Needs Review = 25%, Missing = 0%."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_EXPLAIN_SCORE",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["what is missing before certification", "what is missing before methodology", "what evidence do i still need", "missing for carbon credits"]):
+            answer = (
+                "To prepare your project for formal methodology and standard review, ensure the following core requirements are completed:\n\n"
+                "1. **Baseline Accounting:** Recorded baseline period and emissions backed by POSTED carbon ledger entries.\n"
+                "2. **Monitoring Plan:** Clear measurement boundaries and comparison timelines.\n"
+                "3. **Additionality Context:** Business-as-usual rationale and technical/financial barrier documentation.\n"
+                "4. **Emission Factor Provenance:** Verified emission factor codes and authoritative methodology sources.\n"
+                "5. **Independent Verification:** Third-party auditor validation records."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_MISSING",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["is this project verified", "is project verified", "verification status for carbon"]) or (any(k in q_lower for k in ["verified", "verification"]) and "carbon" in q_lower):
+            answer = (
+                "Verification status is evaluated strictly from existing VerificationRecord entries in the system. "
+                "If external verification has not been conducted by an accredited third-party auditor, external verification is recorded as 'Not recorded'. "
+                "Senseible does not claim validation or verification without documented proof."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_VERIFICATION",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
+        if any(k in q_lower for k in ["is this project ready for carbon credits", "carbon credit readiness", "am i ready for carbon credits", "carbon credit project readiness"]):
+            answer = (
+                "Your project's Carbon Credit Readiness is evaluated across 15 structured dimensions to assess whether documentation, "
+                "accounting, baseline, and monitoring structures are prepared to begin formal standard review.\n\n"
+                "• **Readiness Bands:** 0–39 (NOT_READY), 40–69 (PARTIALLY_READY), 70–100 (READY_FOR_METHODOLOGY_REVIEW).\n"
+                "• **Important Notice:** READY_FOR_METHODOLOGY_REVIEW means the project package is sufficiently structured to begin methodology review. "
+                "It does not mean carbon credits are eligible or issued."
+            )
+            return CopilotResponse(
+                answer=answer,
+                intent="CARBON_CREDIT_READINESS",
+                sources=validated_sources,
+                actions=actions,
+                recommendations=recs,
+                context_available=True,
+                summary=context.summary
+            )
+
 
         if any(k in q_lower for k in ["did this project reduce", "did project reduce", "did the project cause", "project cause emissions"]):
             answer = "An observed accounting change is recorded between the reference and measurement periods using actual POSTED carbon ledger data. This comparison does not by itself establish that the reduction project caused the change."

@@ -643,8 +643,38 @@ export const getForecastById = async (forecastId) => {
   return response.data;
 };
 
+// ============================================================================
+// STEP 22A: REDUCTION OPPORTUNITY INTELLIGENCE API SERVICES
+// ============================================================================
+
+export const getReductionIntelligencePriorities = async (params = {}) => {
+  const response = await api.get('/reduction-intelligence', { params });
+  return response.data;
+};
+
+export const getReductionIntelligenceSummary = async (params = {}) => {
+  const response = await api.get('/reduction-intelligence/summary', { params });
+  return response.data;
+};
+
+export const getReductionIntelligenceById = async (priorityId) => {
+  const response = await api.get(`/reduction-intelligence/${priorityId}`);
+  return response.data;
+};
+
+export const getDocumentReductionIntelligence = async (documentId) => {
+  const response = await api.get(`/reduction-intelligence/document/${documentId}`);
+  return response.data;
+};
+
+export const recalculateReductionIntelligence = async (documentId = null) => {
+  const params = documentId ? { document_id: documentId } : {};
+  const response = await api.post('/reduction-intelligence/recalculate', null, { params });
+  return response.data;
+};
 
 export default api;
+
 
 
 

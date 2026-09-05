@@ -42,6 +42,25 @@ def classify_intent(query: str, history: Optional[List[Dict[str, str]]] = None) 
         for turn in history[-4:]:
             combined_context += " " + turn.get("content", "").lower()
 
+    # Carbon Credit Intents (Step 20)
+    if any(k in q for k in ["why is my carbon credit readiness score", "why is my score", "explain readiness score", "explain carbon credit score"]):
+        return "CARBON_CREDIT_EXPLAIN_SCORE"
+
+    if any(k in q for k in ["what is missing before certification", "what is missing before methodology", "what evidence do i still need", "missing for carbon credits", "missing before certification"]):
+        return "CARBON_CREDIT_MISSING"
+
+    if any(k in q for k in ["what should i do next", "carbon credit next step", "carbon credit next action", "next steps for carbon credits"]) and any(c in combined_context for c in ["carbon credit", "readiness", "project", "certification"]):
+        return "CARBON_CREDIT_NEXT_ACTION"
+
+    if any(k in q for k in ["is this project verified", "is project verified", "verification status", "verified for carbon credits", "externally verified"]):
+        return "CARBON_CREDIT_VERIFICATION"
+
+    if any(k in q for k in ["methodology readiness", "verra eligible", "gold standard", "methodology review", "generic carbon standard"]):
+        return "CARBON_CREDIT_METHODOLOGY"
+
+    if any(k in q for k in ["carbon credit", "carbon credits", "ready for carbon credits", "carbon credit readiness", "tradable credits"]):
+        return "CARBON_CREDIT_READINESS"
+
     # 1. DOCUMENT_REVIEW: Items needing attention or verification
     if any(k in q for k in [
         "need review", "needs review", "attention", "pending review", 
@@ -55,7 +74,8 @@ def classify_intent(query: str, history: Optional[List[Dict[str, str]]] = None) 
     ]):
         return "MISSING_DATA"
 
-    # 3. ACTION_RECOMMENDATION: Steps to reduce emissions or improve sustainability
+    # 3. ACTION_RECOMMENDATION / REDUCTION_PRIORITY: Steps to reduce emissions, reduction intelligence priorities, or improve sustainability
+
     reduction_verbs = ["reduce", "reduction", "lower", "lowering", "decrease", "decreasing", "cut", "cutting", "minimize", "minimizing", "mitigate"]
     emissions_terms = ["emission", "emissions", "carbon", "footprint", "ghg", "scope 1", "scope 2", "scope1", "scope2"]
     has_reduction_action = any(v in q for v in reduction_verbs) and any(e in q for e in emissions_terms)
@@ -66,10 +86,18 @@ def classify_intent(query: str, history: Optional[List[Dict[str, str]]] = None) 
         "what actions", "action recommendation", "next steps", "focus on first", "focus first",
         "what should i focus", "what to focus", "where should i focus", "where should we focus", "where to focus",
         "what can i do", "what can we do", "what should i do",
-        "biggest opportunity", "biggest sustainability opportunity",
-        "opportunity", "opportunities", "where is our biggest"
+        "biggest opportunity", "biggest sustainability opportunity", "biggest reduction opportunity",
+        "opportunity", "opportunities", "where is our biggest",
+        "what should i focus on first", "what should we focus on first", "where should i focus first", "where should we focus first",
+        "where can i reduce emissions", "where can we reduce emissions",
+        "what is my biggest reduction opportunity", "why is electricity my top priority", "why is electricity top priority",
+        "what should i work on next", "what should we work on next",
+        "which emission source needs attention most", "which source needs attention",
+        "reduction priority", "reduction priorities", "reduction intelligence",
+        "top reduction priority", "highest reduction priority"
     ]):
         return "ACTION_RECOMMENDATION"
+
 
     # 4. EMISSIONS_ANALYSIS: Scope 1/2 GHG, carbon footprint changes
     if any(k in q for k in [
